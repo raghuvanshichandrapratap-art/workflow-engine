@@ -3,12 +3,7 @@ package main
 import (
 	// "fmt"
 	"log"
-
-	// "github.com/gin-gonic/gin"
-
-	// "database/sql"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
+	"workflow-engine/config"
 )
 
 type Workflow struct {
@@ -76,16 +71,7 @@ func main() {
 	// router.GET("/workflow/:id", getWorkflow)
 	// router.DELETE("/workflow/:id", deleteWorkflow)
 	// router.Run() // listens on 0.0.0.0:8080 by default
-	dsn := "host=localhost user=postgres password= dbname=workflow_engine port=5432 sslmode=disable"
-
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	db.AutoMigrate(&Workflow{})
-
-	log.Println("Connected!")
+	db := config.ConnectDB()
 
 	// create
 	workflow := Workflow{
