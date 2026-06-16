@@ -68,7 +68,19 @@ func main() {
 	// router.GET("/workflow/:id", getWorkflow)
 	// router.DELETE("/workflow/:id", deleteWorkflow)
 	// router.Run() // listens on 0.0.0.0:8080 by default
-	db := config.ConnectDB()
+
+	err := config.LoadEnv()
+	if err != nil {
+		panic("Failed to load environment variables")
+	}
+
+	db := config.ConnectDB(
+		config.GetEnv("DB_HOST"),
+		config.GetEnv("DB_USER"),
+		config.GetEnv("DB_PASSWORD"),
+		config.GetEnv("DB_NAME"),
+		config.GetEnv("DB_PORT"),
+	)
 
 	repo := repos.NewWorkflowRepository(db)
 

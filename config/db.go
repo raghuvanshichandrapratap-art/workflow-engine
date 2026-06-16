@@ -8,8 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func ConnectDB() *gorm.DB {
-	dsn := "host=localhost user=postgres password= dbname=workflow_engine port=5432 sslmode=disable"
+func ConnectDB(host, user, password, dbname, port string) *gorm.DB {
+	dsn := "host=" + host + " user=" + user + " password=" + password + " dbname=" + dbname + " port=" + port + " sslmode=disable"
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
