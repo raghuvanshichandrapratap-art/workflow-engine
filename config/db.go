@@ -2,16 +2,11 @@ package config
 
 import (
 	"log"
-	// "database/sql"
+	"workflow-engine/models"
+
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
-
-type Workflow struct {
-	ID          uint
-	Name        string
-	Description string
-}
 
 func ConnectDB() *gorm.DB {
 	dsn := "host=localhost user=postgres password= dbname=workflow_engine port=5432 sslmode=disable"
@@ -21,7 +16,7 @@ func ConnectDB() *gorm.DB {
 		log.Fatal(err)
 	}
 
-	db.AutoMigrate(&Workflow{})
+	db.AutoMigrate(&models.Workflow{})
 
 	log.Println("Connected!")
 

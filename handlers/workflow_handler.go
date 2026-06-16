@@ -1,0 +1,39 @@
+package handlers
+
+import (
+	"workflow-engine/services"
+
+	"github.com/gin-gonic/gin"
+)
+
+type WorkflowHandler struct {
+	service *services.WorkflowService
+}
+
+func NewWorkflowHandler(service *services.WorkflowService) *WorkflowHandler {
+	return &WorkflowHandler{service: service}
+}
+
+type CreateWorkflowRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
+
+	var req CreateWorkflowRequest
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	workflow, err := h.service.CreateWorkflow(req.Name, req.Description)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(201, workflow)
+}

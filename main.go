@@ -1,16 +1,13 @@
 package main
 
 import (
-	// "fmt"
-	"log"
 	"workflow-engine/config"
-)
+	"workflow-engine/handlers"
+	"workflow-engine/repos"
+	"workflow-engine/services"
 
-type Workflow struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-}
+	"github.com/gin-gonic/gin"
+)
 
 // var workflows = []Workflow{
 // 	{ID: 1, Name: "Age Validation", Description: "Reject under 18"},
@@ -73,23 +70,35 @@ func main() {
 	// router.Run() // listens on 0.0.0.0:8080 by default
 	db := config.ConnectDB()
 
-	// create
-	workflow := Workflow{
-		Name:        "Email verification",
-		Description: "Send verification email",
-	}
-	db.Create(&workflow)
+	repo := repos.NewWorkflowRepository(db)
 
-	// read
-	var readWorkflow Workflow
-	db.First(&readWorkflow, workflow.ID)
-	log.Printf("Read Workflow: %+v\n", readWorkflow)
+	service := services.NewWorkflowService(repo)
 
-	// update
-	db.Model(&readWorkflow).Update("Description", "Reject under 21")
-	log.Printf("Updated Workflow: %+v\n", readWorkflow)
+	handler := handlers.NewWorkflowHandler(service)
 
-	// delete
-	db.Delete(&readWorkflow)
-	log.Println("Deleted Workflow")
+	router := gin.Default()
+
+	router.POST("/workflow", handler.CreateWorkflow)
+
+	// repo := repos.WorkflowRepository{db}
+
+	// // create
+	// workflow := Workflow{
+	// 	Name:        "Email verification",
+	// 	Description: "Send verification email",
+	// }
+	// db.Create(&workflow)
+
+	// // read
+	// var readWorkflow Workflow
+	// db.First(&readWorkflow, workflow.ID)
+	// log.Printf("Read Workflow: %+v\n", readWorkflow)
+
+	// // update
+	// db.Model(&readWorkflow).Update("Description", "Reject under 21")
+	// log.Printf("Updated Workflow: %+v\n", readWorkflow)
+
+	// // delete
+	// db.Delete(&readWorkflow)
+	// log.Println("Deleted Workflow")
 }
