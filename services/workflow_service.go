@@ -26,3 +26,7 @@ func (s *WorkflowService) CreateWorkflow(name string, description string) (*mode
 
 	return workflow, nil
 }
+
+func (s *WorkflowService) GetWorkflow(id string) (*models.Workflow, error) {
+	return s.repo.GetByID(id)
+}

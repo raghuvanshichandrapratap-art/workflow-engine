@@ -92,19 +92,9 @@ func main() {
 
 	router.POST("/workflow", handler.CreateWorkflow)
 
-	// repo := repos.WorkflowRepository{db}
+	router.GET("/workflow/:id", handler.GetWorkflow)
 
-	// // create
-	// workflow := Workflow{
-	// 	Name:        "Email verification",
-	// 	Description: "Send verification email",
-	// }
-	// db.Create(&workflow)
-
-	// // read
-	// var readWorkflow Workflow
-	// db.First(&readWorkflow, workflow.ID)
-	// log.Printf("Read Workflow: %+v\n", readWorkflow)
+	router.Run() // listens on 0.0.0.0:8080 by default
 
 	// // update
 	// db.Model(&readWorkflow).Update("Description", "Reject under 21")

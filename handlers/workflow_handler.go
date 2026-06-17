@@ -37,3 +37,16 @@ func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
 
 	c.JSON(201, workflow)
 }
+
+func (h *WorkflowHandler) GetWorkflow(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	workflow, err := h.service.GetWorkflow(workflowID)
+
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, workflow)
+}
