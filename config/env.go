@@ -7,6 +7,9 @@ import (
 )
 
 func LoadEnv() error {
+	if _, err := os.Stat(".env"); os.IsNotExist(err) {
+		return nil
+	}
 	return godotenv.Load()
 }
 
