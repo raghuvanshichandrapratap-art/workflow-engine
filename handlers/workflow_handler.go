@@ -70,3 +70,16 @@ func (h *WorkflowHandler) UpdateWorkflow(c *gin.Context) {
 
 	c.JSON(200, workflow)
 }
+
+func (h *WorkflowHandler) DeleteWorkflow(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	err := h.service.DeleteWorkflow(workflowID)
+
+	if err != nil {
+		c.JSON(404, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.Status(204)
+}

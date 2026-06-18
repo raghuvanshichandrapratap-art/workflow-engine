@@ -46,3 +46,12 @@ func (s *WorkflowService) UpdateWorkflow(id string, name string, description str
 
 	return workflow, nil
 }
+
+func (s *WorkflowService) DeleteWorkflow(id string) error {
+	workflow, err := s.repo.GetByID(id)
+	if err != nil {
+		return err
+	}
+
+	return s.repo.DeleteByID(workflow.ID)
+}

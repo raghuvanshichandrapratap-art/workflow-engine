@@ -30,7 +30,6 @@ func (r *WorkflowRepository) Update(workflow *models.Workflow) error {
 	return r.db.Save(workflow).Error
 }
 
-// // delete a workflow by ID
-// func (r *WorkflowRepository) DeleteByID(id uint) error {
-// 	return r.db.Delete(&models.Workflow{}, id).Error
-// }
+func (r *WorkflowRepository) DeleteByID(id uint) error {
+	return r.db.Delete(&models.Workflow{}, id).Error
+}

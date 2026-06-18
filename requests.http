@@ -8,13 +8,16 @@ Content-Type: application/json
 }
 
 ### Get Workflow
-GET http://localhost:8080/workflow/2
+GET http://localhost:8080/workflow/1
 
 ### Update Workflow
-PUT http://localhost:8080/workflow/2
+PUT http://localhost:8080/workflow/3
 Content-Type: application/json
 
 {
     "name": "Age verification",
     "description": "verify age is above 21"
 }
+
+### Delete Workflow
+DELETE http://localhost:8080/workflow/3
