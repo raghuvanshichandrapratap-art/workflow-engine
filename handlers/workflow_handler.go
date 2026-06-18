@@ -50,3 +50,23 @@ func (h *WorkflowHandler) GetWorkflow(c *gin.Context) {
 
 	c.JSON(200, workflow)
 }
+
+func (h *WorkflowHandler) UpdateWorkflow(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	var req CreateWorkflowRequest
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	workflow, err := h.service.UpdateWorkflow(workflowID, req.Name, req.Description)
+
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, workflow)
+}

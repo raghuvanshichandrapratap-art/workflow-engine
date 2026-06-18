@@ -30,3 +30,19 @@ func (s *WorkflowService) CreateWorkflow(name string, description string) (*mode
 func (s *WorkflowService) GetWorkflow(id string) (*models.Workflow, error) {
 	return s.repo.GetByID(id)
 }
+
+func (s *WorkflowService) UpdateWorkflow(id string, name string, description string) (*models.Workflow, error) {
+	workflow, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	workflow.Name = name
+	workflow.Description = description
+
+	if err := s.repo.Update(workflow); err != nil {
+		return nil, err
+	}
+
+	return workflow, nil
+}

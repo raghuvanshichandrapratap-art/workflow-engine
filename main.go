@@ -94,6 +94,8 @@ func main() {
 
 	router.GET("/workflow/:id", handler.GetWorkflow)
 
+	router.PUT("/workflow/:id", handler.UpdateWorkflow)
+
 	router.Run() // listens on 0.0.0.0:8080 by default
 
 	// // update
