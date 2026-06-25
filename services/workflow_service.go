@@ -1,6 +1,8 @@
 package services
 
 import (
+	"encoding/json"
+	"fmt"
 	"workflow-engine/models"
 	"workflow-engine/repos"
 )
@@ -59,7 +61,12 @@ func (s *WorkflowService) GenerateDSL(id string) (*models.Workflow, error) {
 		return nil, err
 	}
 
-	workflow.DSL = dsl
+	dslBytes, err := json.Marshal(dsl)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize DSL: %w", err)
+	}
+
+	workflow.DSL = string(dslBytes)
 
 	if err := s.repo.Update(workflow); err != nil {
 		return nil, err
