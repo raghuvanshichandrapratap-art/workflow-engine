@@ -71,6 +71,18 @@ func (h *WorkflowHandler) UpdateWorkflow(c *gin.Context) {
 	c.JSON(200, workflow)
 }
 
+func (h *WorkflowHandler) GenerateDSL(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	workflow, err := h.service.GenerateDSL(workflowID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, workflow)
+}
+
 func (h *WorkflowHandler) DeleteWorkflow(c *gin.Context) {
 	workflowID := c.Param("id")
 

@@ -7,10 +7,11 @@ import (
 
 type WorkflowService struct {
 	repo *repos.WorkflowRepository
+	ai   *AIService
 }
 
-func NewWorkflowService(repo *repos.WorkflowRepository) *WorkflowService {
-	return &WorkflowService{repo: repo}
+func NewWorkflowService(repo *repos.WorkflowRepository, ai *AIService) *WorkflowService {
+	return &WorkflowService{repo: repo, ai: ai}
 }
 
 func (s *WorkflowService) CreateWorkflow(name string, description string) (*models.Workflow, error) {
@@ -39,6 +40,26 @@ func (s *WorkflowService) UpdateWorkflow(id string, name string, description str
 
 	workflow.Name = name
 	workflow.Description = description
+
+	if err := s.repo.Update(workflow); err != nil {
+		return nil, err
+	}
+
+	return workflow, nil
+}
+
+func (s *WorkflowService) GenerateDSL(id string) (*models.Workflow, error) {
+	workflow, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	dsl, err := s.ai.GenerateDSL(workflow.Description)
+	if err != nil {
+		return nil, err
+	}
+
+	workflow.DSL = dsl
 
 	if err := s.repo.Update(workflow); err != nil {
 		return nil, err

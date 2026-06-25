@@ -26,19 +26,19 @@ func main() {
 
 	repo := repos.NewWorkflowRepository(db)
 
-	service := services.NewWorkflowService(repo)
+	aiService := services.NewAIService()
+
+	service := services.NewWorkflowService(repo, aiService)
 
 	handler := handlers.NewWorkflowHandler(service)
 
 	router := gin.Default()
 
 	router.POST("/workflow", handler.CreateWorkflow)
-
 	router.GET("/workflow/:id", handler.GetWorkflow)
-
 	router.PUT("/workflow/:id", handler.UpdateWorkflow)
-
 	router.DELETE("/workflow/:id", handler.DeleteWorkflow)
+	router.POST("/workflow/:id/generate-dsl", handler.GenerateDSL)
 
-	router.Run() // listens on 0.0.0.0:8080 by default
+	router.Run()
 }

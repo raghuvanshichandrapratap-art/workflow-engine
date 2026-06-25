@@ -8,7 +8,10 @@ Content-Type: application/json
 }
 
 ### Get Workflow
-GET http://localhost:8080/workflow/1
+GET http://localhost:8080/workflow/4
+
+### Generate DSL
+POST http://localhost:8080/workflow/4/generate-dsl
 
 ### Update Workflow
 PUT http://localhost:8080/workflow/3
