@@ -51,7 +51,15 @@ Rules:
 - type is either "condition" or "action"
 - condition fields: field, operator (gt/lt/eq/gte/lte), value, on_pass, on_fail
 - on_pass and on_fail are either "next" or "reject"
-- action fields: action (send_email/approve/reject), params (optional key-value pairs)
+- field can be any user attribute: age, email, country, credit_score, role, status, etc.
+
+Available actions:
+- approve: mark workflow as approved, no params needed
+- reject: mark workflow as rejected, no params needed
+- send_email: send an email, params: { "template": "<template_name>", "to": "<email_field>" }
+- assign_role: assign a role to the user, params: { "role": "<role_name>" }
+- webhook: call an external URL, params: { "url": "<url>", "method": "POST" }
+
 - Return ONLY the JSON, no explanation, no markdown`
 
 func (a *AIService) GenerateDSL(description string) (*models.DSL, error) {
