@@ -66,7 +66,7 @@ func (s *WorkflowService) GenerateDSL(id string) (*models.Workflow, error) {
 		return nil, fmt.Errorf("failed to serialize DSL: %w", err)
 	}
 
-	workflow.DSL = string(dslBytes)
+	workflow.DSL = json.RawMessage(dslBytes)
 
 	if err := s.repo.Update(workflow); err != nil {
 		return nil, err

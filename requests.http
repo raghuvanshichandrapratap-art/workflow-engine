@@ -3,15 +3,15 @@ POST http://localhost:8080/workflow
 Content-Type: application/json
 
 {
-    "name": "Age verification",
-    "description": "verify age is above 18"
+    "name": "Document Verification",
+    "description": "Verify submitted documents"
 }
 
 ### Get Workflow
-GET http://localhost:8080/workflow/4
+GET http://localhost:8080/workflow/2
 
 ### Generate DSL
-POST http://localhost:8080/workflow/5/generate-dsl
+POST http://localhost:8080/workflow/2/generate-dsl
 
 ### Update Workflow
 PUT http://localhost:8080/workflow/3
