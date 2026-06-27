@@ -28,7 +28,9 @@ func main() {
 
 	aiService := services.NewAIService()
 
-	service := services.NewWorkflowService(repo, aiService)
+	engine := services.NewExecutionEngine()
+
+	service := services.NewWorkflowService(repo, aiService, engine)
 
 	handler := handlers.NewWorkflowHandler(service)
 
@@ -39,6 +41,7 @@ func main() {
 	router.PUT("/workflow/:id", handler.UpdateWorkflow)
 	router.DELETE("/workflow/:id", handler.DeleteWorkflow)
 	router.POST("/workflow/:id/generate-dsl", handler.GenerateDSL)
+	router.POST("/workflow/:id/execute", handler.ExecuteWorkflow)
 
 	router.Run()
 }

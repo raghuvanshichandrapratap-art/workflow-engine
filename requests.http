@@ -3,18 +3,18 @@ POST http://localhost:8080/workflow
 Content-Type: application/json
 
 {
-    "name": "Document Verification",
-    "description": "Verify submitted documents"
+    "name": "Age verification",
+    "description": "verify age is above 18 and send email"
 }
 
 ### Get Workflow
-GET http://localhost:8080/workflow/2
+GET http://localhost:8080/workflow/3
 
 ### Generate DSL
-POST http://localhost:8080/workflow/2/generate-dsl
+POST http://localhost:8080/workflow/3/generate-dsl
 
 ### Update Workflow
-PUT http://localhost:8080/workflow/3
+PUT http://localhost:8080/workflow/2
 Content-Type: application/json
 
 {
@@ -24,3 +24,15 @@ Content-Type: application/json
 
 ### Delete Workflow
 DELETE http://localhost:8080/workflow/3
+
+### Execute Workflow
+POST http://localhost:8080/workflow/3/execute
+Content-Type: application/json
+
+{
+    "name": "John Doe",
+    "age": 35,
+    "email": "john@company.com",
+    "documents_submitted": true,
+    "role": "engineer"
+}

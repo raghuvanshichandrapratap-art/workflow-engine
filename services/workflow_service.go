@@ -8,12 +8,13 @@ import (
 )
 
 type WorkflowService struct {
-	repo *repos.WorkflowRepository
-	ai   *AIService
+	repo   *repos.WorkflowRepository
+	ai     *AIService
+	engine *ExecutionEngine
 }
 
-func NewWorkflowService(repo *repos.WorkflowRepository, ai *AIService) *WorkflowService {
-	return &WorkflowService{repo: repo, ai: ai}
+func NewWorkflowService(repo *repos.WorkflowRepository, ai *AIService, engine *ExecutionEngine) *WorkflowService {
+	return &WorkflowService{repo: repo, ai: ai, engine: engine}
 }
 
 func (s *WorkflowService) CreateWorkflow(name string, description string) (*models.Workflow, error) {
@@ -73,6 +74,24 @@ func (s *WorkflowService) GenerateDSL(id string) (*models.Workflow, error) {
 	}
 
 	return workflow, nil
+}
+
+func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{}) (*models.ExecutionResult, error) {
+	workflow, err := s.repo.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	if workflow.DSL == nil {
+		return nil, fmt.Errorf("workflow has no DSL, generate it first")
+	}
+
+	var dsl models.DSL
+	if err := json.Unmarshal(workflow.DSL, &dsl); err != nil {
+		return nil, fmt.Errorf("failed to parse DSL: %w", err)
+	}
+
+	return s.engine.Execute(&dsl, input)
 }
 
 func (s *WorkflowService) DeleteWorkflow(id string) error {

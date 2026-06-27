@@ -83,6 +83,24 @@ func (h *WorkflowHandler) GenerateDSL(c *gin.Context) {
 	c.JSON(200, workflow)
 }
 
+func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	var input map[string]interface{}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	result, err := h.service.ExecuteWorkflow(workflowID, input)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, result)
+}
+
 func (h *WorkflowHandler) DeleteWorkflow(c *gin.Context) {
 	workflowID := c.Param("id")
 
