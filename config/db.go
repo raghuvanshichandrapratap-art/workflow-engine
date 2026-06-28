@@ -16,7 +16,7 @@ func ConnectDB(host, user, password, dbname, port string) *gorm.DB {
 		log.Fatal(err)
 	}
 
-	db.AutoMigrate(&models.Workflow{})
+	db.AutoMigrate(&models.Workflow{}, &models.ExecutionLog{})
 
 	log.Println("Connected!")
 

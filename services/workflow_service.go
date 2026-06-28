@@ -8,13 +8,14 @@ import (
 )
 
 type WorkflowService struct {
-	repo   *repos.WorkflowRepository
-	ai     *AIService
-	engine *ExecutionEngine
+	repo    *repos.WorkflowRepository
+	logRepo *repos.ExecutionLogRepository
+	ai      *AIService
+	engine  *ExecutionEngine
 }
 
-func NewWorkflowService(repo *repos.WorkflowRepository, ai *AIService, engine *ExecutionEngine) *WorkflowService {
-	return &WorkflowService{repo: repo, ai: ai, engine: engine}
+func NewWorkflowService(repo *repos.WorkflowRepository, logRepo *repos.ExecutionLogRepository, ai *AIService, engine *ExecutionEngine) *WorkflowService {
+	return &WorkflowService{repo: repo, logRepo: logRepo, ai: ai, engine: engine}
 }
 
 func (s *WorkflowService) CreateWorkflow(name string, description string) (*models.Workflow, error) {
@@ -101,7 +102,20 @@ func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{
 		return nil, err
 	}
 
+	inputBytes, _ := json.Marshal(input)
+	stepsBytes, _ := json.Marshal(result.Steps)
+	s.logRepo.Create(&models.ExecutionLog{
+		WorkflowID: workflow.ID,
+		Status:     result.Status,
+		Input:      json.RawMessage(inputBytes),
+		Steps:      json.RawMessage(stepsBytes),
+	})
+
 	return result, nil
+}
+
+func (s *WorkflowService) GetExecutionHistory(workflowID string) ([]models.ExecutionLog, error) {
+	return s.logRepo.GetByWorkflowID(workflowID)
 }
 
 func (s *WorkflowService) DeleteWorkflow(id string) error {

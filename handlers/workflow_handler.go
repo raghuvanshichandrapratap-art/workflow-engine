@@ -101,6 +101,18 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 	c.JSON(200, result)
 }
 
+func (h *WorkflowHandler) GetExecutionHistory(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	logs, err := h.service.GetExecutionHistory(workflowID)
+	if err != nil {
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(200, logs)
+}
+
 func (h *WorkflowHandler) DeleteWorkflow(c *gin.Context) {
 	workflowID := c.Param("id")
 

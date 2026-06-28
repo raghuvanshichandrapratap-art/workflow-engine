@@ -25,13 +25,16 @@ Content-Type: application/json
 ### Delete Workflow
 DELETE http://localhost:8080/workflow/3
 
+### Get Execution History
+GET http://localhost:8080/workflow/3/executions
+
 ### Execute Workflow
 POST http://localhost:8080/workflow/3/execute
 Content-Type: application/json
 
 {
-    "name": "John Doe",
-    "age": 35,
+    "name": "Anu Kumari",
+    "age": 12,
     "email": "john@company.com",
     "documents_submitted": true,
     "role": "engineer"
