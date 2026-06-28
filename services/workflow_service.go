@@ -91,7 +91,17 @@ func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{
 		return nil, fmt.Errorf("failed to parse DSL: %w", err)
 	}
 
-	return s.engine.Execute(&dsl, input)
+	result, err := s.engine.Execute(&dsl, input)
+	if err != nil {
+		return nil, err
+	}
+
+	workflow.Status = result.Status
+	if err := s.repo.Update(workflow); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }
 
 func (s *WorkflowService) DeleteWorkflow(id string) error {
