@@ -15,8 +15,8 @@ func NewWorkflowHandler(service *services.WorkflowService) *WorkflowHandler {
 }
 
 type CreateWorkflowRequest struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	Name        string `json:"name"        binding:"required"`
+	Description string `json:"description" binding:"required"`
 }
 
 func (h *WorkflowHandler) CreateWorkflow(c *gin.Context) {
@@ -89,6 +89,11 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 	var input map[string]interface{}
 	if err := c.BindJSON(&input); err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	if len(input) == 0 {
+		c.JSON(400, gin.H{"error": "input cannot be empty"})
 		return
 	}
 
