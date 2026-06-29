@@ -211,15 +211,29 @@ async function loadHistory(id) {
     return
   }
 
-  list.innerHTML = data.data.map(log => `
-    <div class="log-item">
-      <div class="log-item-header">
-        <span class="tag ${log.status}">${log.status}</span>
-        <span class="log-date">${new Date(log.created_at).toLocaleString()}</span>
-      </div>
-      <pre>${JSON.stringify(log.input, null, 2)}</pre>
-    </div>
-  `).join('')
+  list.innerHTML = data.data.map(log => {
+    const stepsHtml = (log.steps || []).map(s => {
+      const cls = s.type === 'action' ? 'action' : s.passed ? 'passed' : 'failed'
+      return `
+        <div class="step-item ${cls}">
+          <div class="step-type">${s.type}${s.action ? ' — ' + s.action : ''}</div>
+          <div class="step-msg">${s.message}</div>
+        </div>`
+    }).join('')
+
+    return `
+      <div class="log-item">
+        <div class="log-item-header">
+          <span class="tag ${log.status}">${log.status}</span>
+          <span class="log-date">${new Date(log.created_at).toLocaleString()}</span>
+        </div>
+        <details>
+          <summary style="cursor:pointer;font-size:12px;color:var(--muted);margin-bottom:6px">Input data</summary>
+          <pre>${JSON.stringify(log.input, null, 2)}</pre>
+        </details>
+        <div style="margin-top:8px">${stepsHtml}</div>
+      </div>`
+  }).join('')
 }
 
 function changePage(dir) {
