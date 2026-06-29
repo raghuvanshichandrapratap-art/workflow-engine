@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Workflow Engine</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <header>
+    <h1>AI Workflow Engine</h1>
+    <p>Define workflows in natural language. AI converts them. Engine runs them.</p>
+  </header>
+
+  <main>
+    <!-- Left: workflow list + create -->
+    <section class="sidebar">
+      <div class="card">
+        <h2>Create Workflow</h2>
+        <form id="create-form">
+          <input type="text" id="wf-name" placeholder="Workflow name" required />
+          <textarea id="wf-desc" placeholder="Describe the workflow in plain English..." required></textarea>
+          <button type="submit">Create</button>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>Workflows</h2>
+        <ul id="workflow-list">
+          <li class="empty">No workflows yet.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Right: workflow detail -->
+    <section class="detail" id="detail-panel">
+      <div class="placeholder">
+        <p>Select a workflow to view details</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

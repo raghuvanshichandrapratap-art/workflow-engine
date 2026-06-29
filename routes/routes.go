@@ -7,6 +7,9 @@ import (
 )
 
 func RegisterRoutes(router *gin.Engine, handler *handlers.WorkflowHandler) {
+	router.Static("/static", "./static")
+	router.StaticFile("/", "./static/index.html")
+
 	router.POST("/workflow", handler.CreateWorkflow)
 	router.GET("/workflow/:id", handler.GetWorkflow)
 	router.PUT("/workflow/:id", handler.UpdateWorkflow)
