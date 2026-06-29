@@ -4,6 +4,7 @@ import (
 	"workflow-engine/config"
 	"workflow-engine/handlers"
 	"workflow-engine/repos"
+	"workflow-engine/routes"
 	"workflow-engine/services"
 
 	"github.com/gin-gonic/gin"
@@ -38,13 +39,7 @@ func main() {
 
 	router := gin.Default()
 
-	router.POST("/workflow", handler.CreateWorkflow)
-	router.GET("/workflow/:id", handler.GetWorkflow)
-	router.PUT("/workflow/:id", handler.UpdateWorkflow)
-	router.DELETE("/workflow/:id", handler.DeleteWorkflow)
-	router.POST("/workflow/:id/generate-dsl", handler.GenerateDSL)
-	router.POST("/workflow/:id/execute", handler.ExecuteWorkflow)
-	router.GET("/workflow/:id/executions", handler.GetExecutionHistory)
+	routes.RegisterRoutes(router, handler)
 
 	router.Run()
 }
