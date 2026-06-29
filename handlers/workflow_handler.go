@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"math"
+	"strconv"
 	"workflow-engine/services"
 
 	"github.com/gin-gonic/gin"
@@ -109,13 +111,29 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 func (h *WorkflowHandler) GetExecutionHistory(c *gin.Context) {
 	workflowID := c.Param("id")
 
-	logs, err := h.service.GetExecutionHistory(workflowID)
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if err != nil || limit < 1 || limit > 100 {
+		limit = 10
+	}
+
+	logs, total, err := h.service.GetExecutionHistory(workflowID, page, limit)
 	if err != nil {
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(200, logs)
+	c.JSON(200, gin.H{
+		"data":        logs,
+		"page":        page,
+		"limit":       limit,
+		"total":       total,
+		"total_pages": int(math.Ceil(float64(total) / float64(limit))),
+	})
 }
 
 func (h *WorkflowHandler) DeleteWorkflow(c *gin.Context) {

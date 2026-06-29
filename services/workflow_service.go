@@ -114,8 +114,9 @@ func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{
 	return result, nil
 }
 
-func (s *WorkflowService) GetExecutionHistory(workflowID string) ([]models.ExecutionLog, error) {
-	return s.logRepo.GetByWorkflowID(workflowID)
+func (s *WorkflowService) GetExecutionHistory(workflowID string, page, limit int) ([]models.ExecutionLog, int64, error) {
+	offset := (page - 1) * limit
+	return s.logRepo.GetByWorkflowID(workflowID, offset, limit)
 }
 
 func (s *WorkflowService) DeleteWorkflow(id string) error {
