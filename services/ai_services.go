@@ -64,7 +64,7 @@ Available actions:
 
 func (a *AIService) GenerateDSL(description string) (*models.DSL, error) {
 	resp, err := a.client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
-		Model: "llama-3.3-70b-versatile",
+		Model: "openai/gpt-oss-120b",
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &openai.ResponseFormatJSONObjectParam{},
 		},
