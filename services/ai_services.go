@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	"workflow-engine/models"
 
@@ -62,33 +63,74 @@ Available actions:
 
 - Return ONLY the JSON, no explanation, no markdown`
 
-func (a *AIService) GenerateDSL(description string) (*models.DSL, error) {
+// GenerateDSL asks the AI to convert a description into DSL.
+// It returns the parsed DSL, the raw text the AI replied with (needed if a
+// caller wants to retry with correction), and an error if the request failed
+// or the reply wasn't valid JSON.
+func (a *AIService) GenerateDSL(description string) (*models.DSL, string, error) {
+	return a.generate(description, nil)
+}
+
+// RetryDSL re-asks the AI for a corrected DSL, replaying its previous (bad)
+// reply plus the validation errors it needs to fix. Intended for a single
+// retry after GenerateDSL produces invalid output — not a general retry loop.
+func (a *AIService) RetryDSL(description string, previousRaw string, validationErrs []error) (*models.DSL, string, error) {
+	reasons := make([]string, len(validationErrs))
+	for i, e := range validationErrs {
+		reasons[i] = e.Error()
+	}
+
+	correction := []openai.ChatCompletionMessageParamUnion{
+		{OfAssistant: &openai.ChatCompletionAssistantMessageParam{
+			Content: openai.ChatCompletionAssistantMessageParamContentUnion{
+				OfString: openai.String(previousRaw),
+			},
+		}},
+		{OfUser: &openai.ChatCompletionUserMessageParam{
+			Content: openai.ChatCompletionUserMessageParamContentUnion{
+				OfString: openai.String(fmt.Sprintf(
+					"That response was invalid for these reasons:\n- %s\n\nFix these issues and return corrected JSON only, following the schema exactly. No explanation, no markdown.",
+					strings.Join(reasons, "\n- "),
+				)),
+			},
+		}},
+	}
+
+	return a.generate(description, correction)
+}
+
+func (a *AIService) generate(description string, extra []openai.ChatCompletionMessageParamUnion) (*models.DSL, string, error) {
+	messages := []openai.ChatCompletionMessageParamUnion{
+		{OfSystem: &openai.ChatCompletionSystemMessageParam{
+			Content: openai.ChatCompletionSystemMessageParamContentUnion{
+				OfString: openai.String(systemPrompt),
+			},
+		}},
+		{OfUser: &openai.ChatCompletionUserMessageParam{
+			Content: openai.ChatCompletionUserMessageParamContentUnion{
+				OfString: openai.String(fmt.Sprintf("Generate DSL for: %s", description)),
+			},
+		}},
+	}
+	messages = append(messages, extra...)
+
 	resp, err := a.client.Chat.Completions.New(context.TODO(), openai.ChatCompletionNewParams{
 		Model: "openai/gpt-oss-120b",
 		ResponseFormat: openai.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &openai.ResponseFormatJSONObjectParam{},
 		},
-		Messages: []openai.ChatCompletionMessageParamUnion{
-			{OfSystem: &openai.ChatCompletionSystemMessageParam{
-				Content: openai.ChatCompletionSystemMessageParamContentUnion{
-					OfString: openai.String(systemPrompt),
-				},
-			}},
-			{OfUser: &openai.ChatCompletionUserMessageParam{
-				Content: openai.ChatCompletionUserMessageParamContentUnion{
-					OfString: openai.String(fmt.Sprintf("Generate DSL for: %s", description)),
-				},
-			}},
-		},
+		Messages: messages,
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
+
+	raw := resp.Choices[0].Message.Content
 
 	var dsl models.DSL
-	if err := json.Unmarshal([]byte(resp.Choices[0].Message.Content), &dsl); err != nil {
-		return nil, fmt.Errorf("AI returned invalid DSL: %w", err)
+	if err := json.Unmarshal([]byte(raw), &dsl); err != nil {
+		return nil, raw, fmt.Errorf("AI returned invalid DSL: %w", err)
 	}
 
-	return &dsl, nil
+	return &dsl, raw, nil
 }

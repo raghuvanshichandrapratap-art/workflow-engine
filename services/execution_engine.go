@@ -120,7 +120,10 @@ func executeAction(step models.Step) (string, error) {
 		role := step.Params["role"]
 		return fmt.Sprintf("role '%s' assigned", role), nil
 	case "webhook":
-		url := step.Params["url"]
+		url, err := normalizeWebhookURL(step.Params["url"])
+		if err != nil {
+			return "", fmt.Errorf("webhook call failed: %w", err)
+		}
 		payload, _ := json.Marshal(step.Params)
 		resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
 		if err != nil {
