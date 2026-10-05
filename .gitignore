@@ -27,6 +27,9 @@ go.work.sum
 # env file
 .env
 
+# eval harness run output (eval/dataset.json stays tracked)
+eval/results/
+
 # Editor/IDE
 # .idea/
 # .vscode/

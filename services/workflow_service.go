@@ -59,35 +59,19 @@ func (s *WorkflowService) GenerateDSL(id string) (*models.Workflow, error) {
 		return nil, err
 	}
 
-	dsl, raw, err := s.ai.GenerateDSL(workflow.Description)
-
-	var problems []error
-	switch {
-	case err != nil && raw == "":
-		// The API call itself failed (network, rate limit, etc.) — nothing to
-		// correct, so no retry on it.
-		return nil, fmt.Errorf("AI request failed: %w", err)
-	case err != nil:
-		// AI replied, but it wasn't valid JSON at all.
-		problems = []error{err}
-	default:
-		problems = ValidateDSL(dsl)
+	result, err := GenerateValidatedDSL(s.ai, workflow.Description)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(problems) == 0 {
-		return s.saveDSL(workflow, dsl)
+	if !result.FinalValid {
+		if result.RetryAttempted {
+			return nil, fmt.Errorf("AI failed to generate a valid workflow after retry: %s", joinErrors(result.ValidationErrors))
+		}
+		return nil, fmt.Errorf("AI failed to generate a valid workflow: %s", joinErrors(result.ValidationErrors))
 	}
 
-	retryDSL, _, retryErr := s.ai.RetryDSL(workflow.Description, raw, problems)
-	if retryErr != nil {
-		return nil, fmt.Errorf("AI failed to generate a valid workflow: %w", retryErr)
-	}
-
-	if retryProblems := ValidateDSL(retryDSL); len(retryProblems) > 0 {
-		return nil, fmt.Errorf("AI failed to generate a valid workflow after retry: %s", joinErrors(retryProblems))
-	}
-
-	return s.saveDSL(workflow, retryDSL)
+	return s.saveDSL(workflow, result.DSL)
 }
 
 func (s *WorkflowService) saveDSL(workflow *models.Workflow, dsl *models.DSL) (*models.Workflow, error) {

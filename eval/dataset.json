@@ -1,0 +1,355 @@
+[
+  {
+    "id": "numeric-01",
+    "category": "numeric_condition",
+    "description": "Check if age is above 18, if not reject. If yes approve.",
+    "sample_inputs": [
+      { "input": { "age": 25 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "age": 15 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "numeric-02",
+    "category": "numeric_condition",
+    "description": "Check if salary is less than 50000, if so reject, otherwise approve.",
+    "sample_inputs": [
+      { "input": { "salary": 40000 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "salary": 60000 }, "expected_status": "approved", "expected_actions": ["approve"] }
+    ]
+  },
+  {
+    "id": "numeric-03",
+    "category": "numeric_condition",
+    "description": "Check if credit_score is at least 700, if yes approve, if no reject.",
+    "sample_inputs": [
+      { "input": { "credit_score": 750 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "credit_score": 650 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "numeric-04",
+    "category": "numeric_condition",
+    "description": "Check if years_of_experience is at most 2, if so reject as underqualified, otherwise approve.",
+    "sample_inputs": [
+      { "input": { "years_of_experience": 1 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "years_of_experience": 5 }, "expected_status": "approved", "expected_actions": ["approve"] }
+    ]
+  },
+  {
+    "id": "numeric-05",
+    "category": "numeric_condition",
+    "description": "Check if account_balance is greater than 1000, if not reject, if yes approve.",
+    "sample_inputs": [
+      { "input": { "account_balance": 1500 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "account_balance": 500 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "equality-01",
+    "category": "equality_condition",
+    "description": "Check if country equals 'US', if yes approve, otherwise reject.",
+    "sample_inputs": [
+      { "input": { "country": "US" }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "country": "IN" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "equality-02",
+    "category": "equality_condition",
+    "description": "Check if status equals 'active', if yes approve, if not reject.",
+    "sample_inputs": [
+      { "input": { "status": "active" }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "status": "inactive" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "equality-03",
+    "category": "equality_condition",
+    "description": "Check if verified equals true, if yes approve, otherwise reject.",
+    "sample_inputs": [
+      { "input": { "verified": true }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "verified": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "equality-04",
+    "category": "equality_condition",
+    "description": "Check if role equals 'admin'. If yes, assign the admin role and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "role": "admin" }, "expected_status": "approved", "expected_actions": ["assign_role", "approve"] },
+      { "input": { "role": "user" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "boolean-01",
+    "category": "boolean_field_condition",
+    "description": "Check if documents_submitted is true. If yes, approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "documents_submitted": true }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "documents_submitted": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "boolean-02",
+    "category": "boolean_field_condition",
+    "description": "Check if is_blacklisted equals true. If yes, reject. If no, approve.",
+    "sample_inputs": [
+      { "input": { "is_blacklisted": true }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "is_blacklisted": false }, "expected_status": "approved", "expected_actions": ["approve"] }
+    ]
+  },
+  {
+    "id": "boolean-03",
+    "category": "boolean_field_condition",
+    "description": "Check if has_valid_license equals false. If yes, reject. Otherwise approve.",
+    "sample_inputs": [
+      { "input": { "has_valid_license": false }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "has_valid_license": true }, "expected_status": "approved", "expected_actions": ["approve"] }
+    ]
+  },
+  {
+    "id": "multi-cond-01",
+    "category": "multi_condition_chain",
+    "description": "Check if age is above 18. If not, reject. Then check if country equals 'US'. If not, reject. If both pass, approve.",
+    "sample_inputs": [
+      { "input": { "age": 25, "country": "US" }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "age": 15, "country": "US" }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "age": 25, "country": "IN" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-cond-02",
+    "category": "multi_condition_chain",
+    "description": "Check if credit_score is at least 650. If yes, check if income is above 40000. If both true, approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "credit_score": 700, "income": 50000 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "credit_score": 600, "income": 50000 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "credit_score": 700, "income": 30000 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-cond-03",
+    "category": "multi_condition_chain",
+    "description": "Check if order_total is greater than 100. If yes, check if is_member equals true. If both true, assign the discount role and approve. If either fails, reject.",
+    "sample_inputs": [
+      { "input": { "order_total": 150, "is_member": true }, "expected_status": "approved", "expected_actions": ["assign_role", "approve"] },
+      { "input": { "order_total": 50, "is_member": true }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "order_total": 150, "is_member": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-cond-04",
+    "category": "multi_condition_chain",
+    "description": "Check if years_of_experience is at least 3. If yes, check if certification equals 'AWS'. If both true, approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "years_of_experience": 5, "certification": "AWS" }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "years_of_experience": 2, "certification": "AWS" }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "years_of_experience": 5, "certification": "GCP" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-cond-05",
+    "category": "multi_condition_chain",
+    "description": "Check if temperature is less than 100. If yes, check if pressure is less than 50. If both true, approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "temperature": 80, "pressure": 40 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "temperature": 120, "pressure": 40 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "temperature": 80, "pressure": 60 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "single-action-01",
+    "category": "single_action",
+    "description": "Check if input_is_valid equals true. If not, reject.",
+    "sample_inputs": [
+      { "input": { "input_is_valid": true }, "expected_status": "approved", "expected_actions": [] },
+      { "input": { "input_is_valid": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "single-action-02",
+    "category": "single_action",
+    "description": "If the field access_granted is true, approve. Otherwise, reject.",
+    "sample_inputs": [
+      { "input": { "access_granted": true }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "access_granted": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "single-action-03",
+    "category": "single_action",
+    "description": "If subscription_active equals false, reject. Otherwise approve.",
+    "sample_inputs": [
+      { "input": { "subscription_active": false }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "subscription_active": true }, "expected_status": "approved", "expected_actions": ["approve"] }
+    ]
+  },
+  {
+    "id": "send-email-01",
+    "category": "send_email_action",
+    "description": "Check if age is above 18. If yes, send a welcome email. If no, reject.",
+    "sample_inputs": [
+      { "input": { "age": 25 }, "expected_status": "approved", "expected_actions": ["send_email"] },
+      { "input": { "age": 15 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "send-email-02",
+    "category": "send_email_action",
+    "description": "Check if order_status equals 'shipped'. If yes, send a shipping confirmation email. If no, reject.",
+    "sample_inputs": [
+      { "input": { "order_status": "shipped" }, "expected_status": "approved", "expected_actions": ["send_email"] },
+      { "input": { "order_status": "pending" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "send-email-03",
+    "category": "send_email_action",
+    "description": "Check if signup_complete equals true. If yes, send an onboarding email and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "signup_complete": true }, "expected_status": "approved", "expected_actions": ["send_email", "approve"] },
+      { "input": { "signup_complete": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "send-email-04",
+    "category": "send_email_action",
+    "description": "Check if payment_status equals 'completed'. If yes, send a receipt email and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "payment_status": "completed" }, "expected_status": "approved", "expected_actions": ["send_email", "approve"] },
+      { "input": { "payment_status": "failed" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "assign-role-01",
+    "category": "assign_role_action",
+    "description": "Check if department equals 'engineering'. If yes, assign the engineer role and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "department": "engineering" }, "expected_status": "approved", "expected_actions": ["assign_role", "approve"] },
+      { "input": { "department": "sales" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "assign-role-02",
+    "category": "assign_role_action",
+    "description": "Check if tenure_years is at least 5. If yes, assign the senior role and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "tenure_years": 5 }, "expected_status": "approved", "expected_actions": ["assign_role", "approve"] },
+      { "input": { "tenure_years": 2 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "assign-role-03",
+    "category": "assign_role_action",
+    "description": "Check if is_manager equals true. If yes, assign the manager role and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "is_manager": true }, "expected_status": "approved", "expected_actions": ["assign_role", "approve"] },
+      { "input": { "is_manager": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "webhook-01",
+    "category": "webhook_action",
+    "description": "Check if order_total is above 500. If yes, call the webhook at www.example.com/notify and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "order_total": 600 }, "expected_status": "approved", "expected_actions": ["webhook", "approve"] },
+      { "input": { "order_total": 100 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "webhook-02",
+    "category": "webhook_action",
+    "description": "Check if fraud_score is less than 10. If yes, post to https://example.org/clear and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "fraud_score": 5 }, "expected_status": "approved", "expected_actions": ["webhook", "approve"] },
+      { "input": { "fraud_score": 50 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "webhook-03",
+    "category": "webhook_action",
+    "description": "Check if inventory_count is greater than 0. If yes, notify the webhook at example.net/restock and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "inventory_count": 10 }, "expected_status": "approved", "expected_actions": ["webhook", "approve"] },
+      { "input": { "inventory_count": 0 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "webhook-04",
+    "category": "webhook_action",
+    "description": "Check if risk_level equals 'high'. If yes, reject. If no, call the compliance webhook at example.com/log and approve.",
+    "sample_inputs": [
+      { "input": { "risk_level": "high" }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "risk_level": "low" }, "expected_status": "approved", "expected_actions": ["webhook", "approve"] }
+    ]
+  },
+  {
+    "id": "multi-action-01",
+    "category": "multi_action_combo",
+    "description": "Check if application_status equals 'approved'. If yes, send a welcome email, assign the member role, and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "application_status": "approved" }, "expected_status": "approved", "expected_actions": ["send_email", "assign_role", "approve"] },
+      { "input": { "application_status": "pending" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-action-02",
+    "category": "multi_action_combo",
+    "description": "Check if score is at least 80. If yes, assign the certified role, send a congratulations email, and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "score": 90 }, "expected_status": "approved", "expected_actions": ["assign_role", "send_email", "approve"] },
+      { "input": { "score": 50 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-action-03",
+    "category": "multi_action_combo",
+    "description": "Check if is_eligible equals true. If yes, call the webhook at example.com/eligible, send a confirmation email, and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "is_eligible": true }, "expected_status": "approved", "expected_actions": ["webhook", "send_email", "approve"] },
+      { "input": { "is_eligible": false }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-action-04",
+    "category": "multi_action_combo",
+    "description": "Check if loan_amount is less than 10000. If yes, send an approval email, call the webhook at example.org/loan-approved, and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "loan_amount": 5000 }, "expected_status": "approved", "expected_actions": ["send_email", "webhook", "approve"] },
+      { "input": { "loan_amount": 20000 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "multi-action-05",
+    "category": "multi_action_combo",
+    "description": "Check if background_check equals 'passed'. If yes, assign the employee role, call the webhook at example.net/hr-notify, send a welcome email, and approve. If no, reject.",
+    "sample_inputs": [
+      { "input": { "background_check": "passed" }, "expected_status": "approved", "expected_actions": ["assign_role", "webhook", "send_email", "approve"] },
+      { "input": { "background_check": "failed" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "ambiguous-01",
+    "category": "ambiguous_description",
+    "description": "Set up a workflow for handling new customer signups.",
+    "skip_behavior_check": true
+  },
+  {
+    "id": "ambiguous-02",
+    "category": "ambiguous_description",
+    "description": "Automate our approval process for the sales team.",
+    "skip_behavior_check": true
+  },
+  {
+    "id": "ambiguous-03",
+    "category": "ambiguous_description",
+    "description": "Create a workflow that checks some basic eligibility rules before approving.",
+    "skip_behavior_check": true
+  },
+  {
+    "id": "ambiguous-04",
+    "category": "ambiguous_description",
+    "description": "Build a process to validate incoming requests.",
+    "skip_behavior_check": true
+  }
+]

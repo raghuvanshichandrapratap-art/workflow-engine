@@ -1,0 +1,70 @@
+[
+  {
+    "id": "negation-01",
+    "category": "operator_negation",
+    "description": "If status is not 'banned', approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "status": "active" }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "status": "banned" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "negation-02",
+    "category": "operator_negation",
+    "description": "If the applicant's background_check is not 'passed', reject. Otherwise approve.",
+    "sample_inputs": [
+      { "input": { "background_check": "passed" }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "background_check": "failed" }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "compound-range-01",
+    "category": "compound_range",
+    "description": "If age is between 18 and 65, approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "age": 30 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "age": 10 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "age": 80 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "compound-range-02",
+    "category": "compound_range",
+    "description": "If temperature is between 50 and 90, approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "temperature": 70 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "temperature": 30 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "temperature": 120 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "action-unsupported-01",
+    "category": "action_unsupported",
+    "description": "If age is above 18, send an SMS notification and approve. If not, reject.",
+    "skip_behavior_check": true
+  },
+  {
+    "id": "action-unsupported-02",
+    "category": "action_unsupported",
+    "description": "If risk_level equals 'high', flag the account for review. Otherwise approve.",
+    "skip_behavior_check": true
+  },
+  {
+    "id": "ambiguous-operator-01",
+    "category": "ambiguous_operator_wording",
+    "description": "If the order total exceeds 1000, approve. Otherwise reject.",
+    "sample_inputs": [
+      { "input": { "order_total": 1500 }, "expected_status": "approved", "expected_actions": ["approve"] },
+      { "input": { "order_total": 500 }, "expected_status": "rejected", "expected_actions": [] }
+    ]
+  },
+  {
+    "id": "ambiguous-operator-02",
+    "category": "ambiguous_operator_wording",
+    "description": "If the score falls short of 50, reject. Otherwise approve.",
+    "sample_inputs": [
+      { "input": { "score": 30 }, "expected_status": "rejected", "expected_actions": [] },
+      { "input": { "score": 80 }, "expected_status": "approved", "expected_actions": ["approve"] }
+    ]
+  }
+]
