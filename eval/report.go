@@ -10,7 +10,8 @@ func BuildReport(results []CaseResult) Report {
 	report := Report{ByCategory: make(map[string]*CategoryStats)}
 	report.TotalCases = len(results)
 
-	var sumLLMInitial, sumValidationInitial, sumLLMRetry, sumValidationRetry, sumTotal float64
+	var sumLLMInitial, sumRateLimitWaitInitial, sumValidationInitial float64
+	var sumLLMRetry, sumRateLimitWaitRetry, sumValidationRetry, sumTotal float64
 	var retryLatencyCount int
 
 	for _, r := range results {
@@ -53,10 +54,12 @@ func BuildReport(results []CaseResult) Report {
 		}
 
 		sumLLMInitial += r.Timings.LLMInitial
+		sumRateLimitWaitInitial += r.Timings.RateLimitWaitInitial
 		sumValidationInitial += r.Timings.ValidationInitial
 		sumTotal += r.Timings.Total
 		if r.RetryAttempted {
 			sumLLMRetry += r.Timings.LLMRetry
+			sumRateLimitWaitRetry += r.Timings.RateLimitWaitRetry
 			sumValidationRetry += r.Timings.ValidationRetry
 			retryLatencyCount++
 		}
@@ -67,6 +70,7 @@ func BuildReport(results []CaseResult) Report {
 		report.SemanticCorrectRateOfTotal = float64(report.SemanticCorrectCount) / graded
 		report.InitialValidRate = float64(report.InitialValidCount) / graded
 		report.AvgLLMInitialMS = sumLLMInitial / graded
+		report.AvgRateLimitWaitInitialMS = sumRateLimitWaitInitial / graded
 		report.AvgValidationInitialMS = sumValidationInitial / graded
 		report.AvgTotalMS = sumTotal / graded
 	}
@@ -80,6 +84,7 @@ func BuildReport(results []CaseResult) Report {
 	}
 	if retryLatencyCount > 0 {
 		report.AvgLLMRetryMS = sumLLMRetry / float64(retryLatencyCount)
+		report.AvgRateLimitWaitRetryMS = sumRateLimitWaitRetry / float64(retryLatencyCount)
 		report.AvgValidationRetryMS = sumValidationRetry / float64(retryLatencyCount)
 	}
 
@@ -106,10 +111,13 @@ func RenderMarkdown(report Report) string {
 	fmt.Fprintf(&b, "| Executed without runtime error (of behavior-gradable) | %d/%d (%.1f%%) |\n\n", report.ExecutedOKCount, report.BehaviorGraded, report.ExecutedOKRateOfGradable*100)
 
 	fmt.Fprintf(&b, "## Average Latency (ms)\n\n")
+	fmt.Fprintf(&b, "Rate-limit wait is time spent sleeping out a Groq 429 — reported separately so it doesn't skew the call-latency numbers above it.\n\n")
 	fmt.Fprintf(&b, "| Stage | Avg ms |\n|---|---|\n")
 	fmt.Fprintf(&b, "| LLM — initial call | %.1f |\n", report.AvgLLMInitialMS)
+	fmt.Fprintf(&b, "| Rate-limit wait — initial | %.1f |\n", report.AvgRateLimitWaitInitialMS)
 	fmt.Fprintf(&b, "| Validation — initial | %.3f |\n", report.AvgValidationInitialMS)
 	fmt.Fprintf(&b, "| LLM — retry call (of retried cases) | %.1f |\n", report.AvgLLMRetryMS)
+	fmt.Fprintf(&b, "| Rate-limit wait — retry (of retried cases) | %.1f |\n", report.AvgRateLimitWaitRetryMS)
 	fmt.Fprintf(&b, "| Validation — retry (of retried cases) | %.3f |\n", report.AvgValidationRetryMS)
 	fmt.Fprintf(&b, "| Total per case | %.1f |\n\n", report.AvgTotalMS)
 

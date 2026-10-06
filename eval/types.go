@@ -33,12 +33,16 @@ type SampleResult struct {
 }
 
 // TimingsMS mirrors services.PipelineTimings in milliseconds, for JSON output.
+// LLMInitial/LLMRetry are genuine call time only; RateLimitWait* is time spent
+// waiting out a 429, reported separately so it doesn't skew the latency numbers.
 type TimingsMS struct {
-	LLMInitial        float64 `json:"llm_initial_ms"`
-	ValidationInitial float64 `json:"validation_initial_ms"`
-	LLMRetry          float64 `json:"llm_retry_ms,omitempty"`
-	ValidationRetry   float64 `json:"validation_retry_ms,omitempty"`
-	Total             float64 `json:"total_ms"`
+	LLMInitial           float64 `json:"llm_initial_ms"`
+	RateLimitWaitInitial float64 `json:"rate_limit_wait_initial_ms,omitempty"`
+	ValidationInitial    float64 `json:"validation_initial_ms"`
+	LLMRetry             float64 `json:"llm_retry_ms,omitempty"`
+	RateLimitWaitRetry   float64 `json:"rate_limit_wait_retry_ms,omitempty"`
+	ValidationRetry      float64 `json:"validation_retry_ms,omitempty"`
+	Total                float64 `json:"total_ms"`
 }
 
 // CaseResult is the full graded outcome for one TestCase.
@@ -97,11 +101,13 @@ type Report struct {
 	ExecutedOKCount          int     `json:"executed_ok_count"`
 	ExecutedOKRateOfGradable float64 `json:"executed_ok_rate_of_gradable"`
 
-	AvgLLMInitialMS        float64 `json:"avg_llm_initial_ms"`
-	AvgValidationInitialMS float64 `json:"avg_validation_initial_ms"`
-	AvgLLMRetryMS          float64 `json:"avg_llm_retry_ms"`
-	AvgValidationRetryMS   float64 `json:"avg_validation_retry_ms"`
-	AvgTotalMS             float64 `json:"avg_total_ms"`
+	AvgLLMInitialMS           float64 `json:"avg_llm_initial_ms"`
+	AvgRateLimitWaitInitialMS float64 `json:"avg_rate_limit_wait_initial_ms"`
+	AvgValidationInitialMS    float64 `json:"avg_validation_initial_ms"`
+	AvgLLMRetryMS             float64 `json:"avg_llm_retry_ms"`
+	AvgRateLimitWaitRetryMS   float64 `json:"avg_rate_limit_wait_retry_ms"`
+	AvgValidationRetryMS      float64 `json:"avg_validation_retry_ms"`
+	AvgTotalMS                float64 `json:"avg_total_ms"`
 
 	ByCategory map[string]*CategoryStats `json:"by_category"`
 }

@@ -24,11 +24,13 @@ func RunCase(ai *services.AIService, engine *services.ExecutionEngine, tc TestCa
 	result.FinalValid = pipelineResult.FinalValid
 	result.ValidationErrors = errsToStrings(pipelineResult.ValidationErrors)
 	result.Timings = TimingsMS{
-		LLMInitial:        msFloat(pipelineResult.Timings.LLMInitial),
-		ValidationInitial: msFloat(pipelineResult.Timings.ValidationInitial),
-		LLMRetry:          msFloat(pipelineResult.Timings.LLMRetry),
-		ValidationRetry:   msFloat(pipelineResult.Timings.ValidationRetry),
-		Total:             msFloat(pipelineResult.Timings.Total),
+		LLMInitial:           msFloat(pipelineResult.Timings.LLMInitial),
+		RateLimitWaitInitial: msFloat(pipelineResult.Timings.RateLimitWaitInitial),
+		ValidationInitial:    msFloat(pipelineResult.Timings.ValidationInitial),
+		LLMRetry:             msFloat(pipelineResult.Timings.LLMRetry),
+		RateLimitWaitRetry:   msFloat(pipelineResult.Timings.RateLimitWaitRetry),
+		ValidationRetry:      msFloat(pipelineResult.Timings.ValidationRetry),
+		Total:                msFloat(pipelineResult.Timings.Total),
 	}
 
 	if !result.FinalValid || tc.SkipBehaviorCheck {

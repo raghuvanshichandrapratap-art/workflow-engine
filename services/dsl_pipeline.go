@@ -8,13 +8,18 @@ import (
 )
 
 // PipelineTimings records how long each stage of GenerateValidatedDSL took.
+// LLMInitial/LLMRetry are genuine call time only — any time spent waiting
+// out a 429 is broken out separately in RateLimitWaitInitial/RateLimitWaitRetry
+// so rate-limit backoff doesn't contaminate the latency numbers.
 // Retry fields are zero when no retry was attempted.
 type PipelineTimings struct {
-	LLMInitial        time.Duration
-	ValidationInitial time.Duration
-	LLMRetry          time.Duration
-	ValidationRetry   time.Duration
-	Total             time.Duration
+	LLMInitial           time.Duration
+	RateLimitWaitInitial time.Duration
+	ValidationInitial    time.Duration
+	LLMRetry             time.Duration
+	RateLimitWaitRetry   time.Duration
+	ValidationRetry      time.Duration
+	Total                time.Duration
 }
 
 // PipelineResult is the outcome of running a description through
@@ -42,8 +47,9 @@ func GenerateValidatedDSL(ai *AIService, description string) (*PipelineResult, e
 	result := &PipelineResult{}
 
 	llmStart := time.Now()
-	dsl, raw, err := ai.GenerateDSL(description)
-	result.Timings.LLMInitial = time.Since(llmStart)
+	dsl, raw, rateLimitWait, err := ai.GenerateDSL(description)
+	result.Timings.LLMInitial = time.Since(llmStart) - rateLimitWait
+	result.Timings.RateLimitWaitInitial = rateLimitWait
 	result.RawInitial = raw
 
 	var problems []error
@@ -71,8 +77,9 @@ func GenerateValidatedDSL(ai *AIService, description string) (*PipelineResult, e
 	result.RetryAttempted = true
 
 	llmRetryStart := time.Now()
-	retryDSL, retryRaw, retryErr := ai.RetryDSL(description, raw, problems)
-	result.Timings.LLMRetry = time.Since(llmRetryStart)
+	retryDSL, retryRaw, retryRateLimitWait, retryErr := ai.RetryDSL(description, raw, problems)
+	result.Timings.LLMRetry = time.Since(llmRetryStart) - retryRateLimitWait
+	result.Timings.RateLimitWaitRetry = retryRateLimitWait
 	result.RawRetry = retryRaw
 
 	if retryErr != nil {

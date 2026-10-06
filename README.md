@@ -36,6 +36,7 @@ workflow-engine/
 │   ├── workflow_service.go        # business logic
 │   ├── ai_services.go             # Groq AI integration
 │   ├── dsl_validator.go           # validates AI-generated DSL
+│   ├── dsl_pipeline.go            # generate -> validate -> retry, with timing
 │   └── execution_engine.go       # runs DSL steps against input data
 ├── repos/
 │   ├── workflow_repo.go           # workflow database queries
@@ -51,6 +52,11 @@ workflow-engine/
 │   ├── index.html                 # frontend UI
 │   ├── style.css                  # styles
 │   └── app.js                     # API calls and interactivity
+├── eval/                          # LLM evaluation harness (see below)
+│   ├── dataset.json               # baseline test cases
+│   ├── dataset_adversarial.json   # edge-case test cases
+│   ├── types.go, io.go, runner.go, report.go
+│   └── cmd/main.go                # CLI entrypoint
 ├── Dockerfile
 └── docker-compose.yml
 ```
@@ -96,6 +102,29 @@ AI-generated output isn't guaranteed to match the schema, so every DSL is valida
 - webhook URLs are checked and normalized — a bare domain like `www.example.com` is accepted and defaults to `https://`
 
 If validation fails, the invalid JSON and the specific validation errors are sent back to the AI once, asking it to self-correct. The corrected response is validated again — if it still fails, `generate-dsl` returns an error instead of saving a broken workflow.
+
+## Evaluation Harness
+
+A standalone harness in `eval/` runs a labeled dataset of workflow descriptions through the real generate → validate → retry pipeline and the execution engine, then reports aggregate metrics. It runs in-process (no HTTP, no Postgres writes) so it's fast and doesn't pollute the database with test workflows.
+
+Run it with:
+```bash
+go run ./eval/cmd                                            # baseline dataset (40 cases)
+go run ./eval/cmd --dataset eval/dataset_adversarial.json     # harder edge cases (8 cases)
+go run ./eval/cmd --dataset eval/dataset.json,eval/dataset_adversarial.json  # both combined
+```
+
+Each test case gives a description plus one or more sample inputs with an expected outcome (status + which actions should fire). The generated DSL is graded **behaviorally** — executed against each sample input and compared to the expected outcome — rather than compared field-by-field against a fixed DSL, since multiple differently-shaped DSLs can be equally correct.
+
+The report covers:
+- **Valid DSL rate** — did the final DSL (after an optional retry) pass validation
+- **Semantic correctness** — did executing it produce the expected status and actions
+- **Initial generation pass rate** and **retry success rate** — how often the first attempt was valid, and how often the self-correction retry fixed a bad one
+- **Executed-without-error rate** — of validated DSLs, how many ran cleanly through the execution engine (a separate signal from correctness — catches gaps where validation passes but execution still breaks)
+- **Average latency** per stage (LLM call, validation, retry) — with time spent waiting out a Groq rate limit (429) tracked and reported separately, so it never silently inflates the call-latency numbers
+- A per-category breakdown
+
+Results are written to `eval/results/<timestamp>/` (gitignored) as `cases.json` (full per-case detail) and `report.md` (the rendered summary).
 
 ## Getting Started
 
