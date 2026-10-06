@@ -103,6 +103,8 @@ AI-generated output isn't guaranteed to match the schema, so every DSL is valida
 
 If validation fails, the invalid JSON and the specific validation errors are sent back to the AI once, asking it to self-correct. The corrected response is validated again — if it still fails, `generate-dsl` returns an error instead of saving a broken workflow.
 
+Validation happens at **generate time only** — `execute` reads whatever DSL is stored and runs it without re-validating. This is safe today because `generate-dsl` is the only code path that ever writes `workflow.DSL` (`update-workflow` only touches name/description), but it's an invariant maintained by that being true, not a check enforced at execution time. If a future change adds another way to write a workflow's DSL, or a validation rule is tightened later, this section needs revisiting.
+
 ## Evaluation Harness
 
 A standalone harness in `eval/` runs a labeled dataset of workflow descriptions through the real generate → validate → retry pipeline and the execution engine, then reports aggregate metrics. It runs in-process (no HTTP, no Postgres writes) so it's fast and doesn't pollute the database with test workflows.
