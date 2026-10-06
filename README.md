@@ -57,9 +57,13 @@ workflow-engine/
 │   ├── dataset_adversarial.json   # edge-case test cases
 │   ├── types.go, io.go, runner.go, report.go
 │   └── cmd/main.go                # CLI entrypoint
+├── tests/
+│   └── integration/                # build-tag gated HTTP + DB tests (see Testing)
 ├── Dockerfile
 └── docker-compose.yml
 ```
+
+Unit tests live alongside the code they test (e.g. `services/dsl_validator_test.go`) rather than in a separate tree — see **Testing** below.
 
 ## DSL Structure
 
@@ -127,6 +131,20 @@ The report covers:
 - A per-category breakdown
 
 Results are written to `eval/results/<timestamp>/` (gitignored) as `cases.json` (full per-case detail) and `report.md` (the rendered summary).
+
+## Testing
+
+Unit tests live next to the code they test and have no external dependencies:
+```bash
+go test ./...
+```
+Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, and `.env` loading.
+
+A separate integration suite exercises the real HTTP API against a real Postgres (the one `docker compose up db` starts), seeding DSLs directly into the database rather than calling `generate-dsl` — testing AI output quality is the evaluation harness's job, not this suite's:
+```bash
+go test -tags=integration -count=1 ./tests/integration/...
+```
+It's gated behind the `integration` build tag so a plain `go test ./...` never requires a database. `-count=1` bypasses Go's test cache — safe to skip for the unit tests above since they're pure logic, but worth keeping here since Go's cache only tracks source files, not live database state: if you change something in Postgres directly (not through a `.go` file), a cached result would otherwise still report a stale "ok". Each test truncates `workflows` and `execution_logs` first (for isolation), and the suite truncates both again when it finishes, so run this against a local dev database, not one with data you want to keep.
 
 ## Getting Started
 

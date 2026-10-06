@@ -8,10 +8,12 @@ import (
 	"workflow-engine/models"
 )
 
-type ExecutionEngine struct{}
+type ExecutionEngine struct {
+	httpClient *http.Client
+}
 
 func NewExecutionEngine() *ExecutionEngine {
-	return &ExecutionEngine{}
+	return &ExecutionEngine{httpClient: http.DefaultClient}
 }
 
 func (e *ExecutionEngine) Execute(dsl *models.DSL, input map[string]interface{}) (*models.ExecutionResult, error) {
@@ -41,7 +43,7 @@ func (e *ExecutionEngine) Execute(dsl *models.DSL, input map[string]interface{})
 			}
 
 		case "action":
-			message, err := executeAction(step)
+			message, err := e.executeAction(step)
 			if err != nil {
 				return nil, err
 			}
@@ -107,7 +109,7 @@ func evaluateCondition(step models.Step, input map[string]interface{}) (bool, st
 	return false, "", fmt.Errorf("unknown operator: %s", step.Operator)
 }
 
-func executeAction(step models.Step) (string, error) {
+func (e *ExecutionEngine) executeAction(step models.Step) (string, error) {
 	switch step.Action {
 	case "approve":
 		return "workflow approved", nil
@@ -125,7 +127,7 @@ func executeAction(step models.Step) (string, error) {
 			return "", fmt.Errorf("webhook call failed: %w", err)
 		}
 		payload, _ := json.Marshal(step.Params)
-		resp, err := http.Post(url, "application/json", bytes.NewBuffer(payload))
+		resp, err := e.httpClient.Post(url, "application/json", bytes.NewBuffer(payload))
 		if err != nil {
 			return "", fmt.Errorf("webhook call failed: %w", err)
 		}

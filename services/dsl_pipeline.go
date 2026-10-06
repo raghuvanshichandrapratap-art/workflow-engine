@@ -37,12 +37,20 @@ type PipelineResult struct {
 	Timings          PipelineTimings
 }
 
+// AIGenerator is the interface GenerateValidatedDSL depends on. *AIService
+// satisfies it implicitly — this exists so tests can substitute a fake and
+// exercise the retry orchestration without hitting the real Groq API.
+type AIGenerator interface {
+	GenerateDSL(description string) (*models.DSL, string, time.Duration, error)
+	RetryDSL(description, previousRaw string, validationErrs []error) (*models.DSL, string, time.Duration, error)
+}
+
 // GenerateValidatedDSL asks the AI for a DSL, validates it, and — if invalid —
 // retries once with the validation errors fed back for self-correction.
 // The returned error is reserved for infra-level failures (the initial AI
 // request itself failing, e.g. network or rate limit) where there's nothing
 // to correct and retrying wouldn't help.
-func GenerateValidatedDSL(ai *AIService, description string) (*PipelineResult, error) {
+func GenerateValidatedDSL(ai AIGenerator, description string) (*PipelineResult, error) {
 	start := time.Now()
 	result := &PipelineResult{}
 
