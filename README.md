@@ -31,13 +31,18 @@ workflow-engine/
 │   ├── db.go                      # database connection
 │   └── env.go                     # environment variable loader
 ├── handlers/
-│   └── workflow_handler.go        # HTTP layer — parses requests, writes responses
+│   ├── workflow_handler.go        # HTTP layer — parses requests, writes responses
+│   └── job_handler.go             # async job status lookup
 ├── services/
 │   ├── workflow_service.go        # business logic
 │   ├── ai_services.go             # Groq AI integration
 │   ├── dsl_validator.go           # validates AI-generated DSL
 │   ├── dsl_pipeline.go            # generate -> validate -> retry, with timing
 │   └── execution_engine.go       # runs DSL steps against input data
+├── worker/                        # async execution worker pool (see below)
+│   ├── job.go                     # Job, JobStatus, concurrency-safe Registry
+│   ├── pool.go                    # fixed worker pool over a bounded channel
+│   └── dispatcher.go              # Enqueue/Get — the dependency handlers hold
 ├── repos/
 │   ├── workflow_repo.go           # workflow database queries
 │   └── execution_log_repo.go     # execution history queries
@@ -138,7 +143,7 @@ Unit tests live next to the code they test and have no external dependencies:
 ```bash
 go test ./...
 ```
-Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, and `.env` loading.
+Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, `.env` loading, and the worker pool (happy path, failure path, panic recovery, queue-full rejection — via a fake `Executor`, no real DB or AI).
 
 A separate integration suite exercises the real HTTP API against a real Postgres (the one `docker compose up db` starts), seeding DSLs directly into the database rather than calling `generate-dsl` — testing AI output quality is the evaluation harness's job, not this suite's:
 ```bash
@@ -170,6 +175,8 @@ DB_NAME=workflow_engine
 DB_PORT=5432
 GROQ_API_KEY=your_groq_api_key
 PORT=5050
+WORKER_COUNT=4
+JOB_QUEUE_CAPACITY=50
 ```
 
 3. Start the application
@@ -226,6 +233,33 @@ Response:
 }
 ```
 
+### Execute a Workflow Asynchronously
+```
+POST /workflow/:id/execute-async
+```
+Same request body as `/execute`. Instead of blocking until the workflow finishes, this enqueues a job and returns immediately:
+```json
+{ "job_id": "a1b2c3d4e5f6a7b8", "status": "queued" }
+```
+Returns `503` instead if the job queue is full (see **Async Execution** below).
+
+### Check Job Status
+```
+GET /jobs/:job_id
+```
+```json
+{
+  "id": "a1b2c3d4e5f6a7b8",
+  "workflow_id": "1",
+  "status": "completed",
+  "result": { "status": "approved", "steps": [...] },
+  "created_at": "...",
+  "started_at": "...",
+  "finished_at": "..."
+}
+```
+`status` is one of `queued`, `running`, `completed`, `failed` (with an `error` field instead of `result` when failed). A completed or failed job is also recorded in `execution_logs`, identically to a synchronous `/execute` call — it shows up in the history endpoint below too.
+
 ### Get Execution History
 ```
 GET /workflow/:id/executions?page=1&limit=10
@@ -267,6 +301,32 @@ PostgreSQL
 ```
 
 The AI service and execution engine are injected into the service layer as dependencies, keeping each layer independently testable and replaceable.
+
+## Async Execution (Worker Pool)
+
+`/execute-async` runs workflows through a fixed-size pool of goroutines instead of on the HTTP request's own goroutine:
+
+```
+POST /execute-async
+     ↓
+Dispatcher.Enqueue — creates a Job (status: queued), submits it to a buffered channel
+     ↓                                     (non-blocking — if the channel is full, the
+     ↓                                      job is marked failed and 503 is returned)
+Job queue (buffered chan *Job, capacity JOB_QUEUE_CAPACITY)
+     ↓
+WORKER_COUNT worker goroutines, each: for job := range queue { process(job) }
+     ↓
+process: mark running → call the same WorkflowService.ExecuteWorkflow the
+         synchronous endpoint uses → mark completed or failed
+```
+
+A few things worth calling out if you're reading this to learn the pattern, not just use it:
+
+- **The worker package never touches the DB or AI directly.** It depends only on a small `Executor` interface (`ExecuteWorkflow(workflowID, input) (*ExecutionResult, error)`), which `*services.WorkflowService` already satisfies. Since that method already writes to `execution_logs`, a job run through the pool produces history identical to a synchronous call — nothing extra to wire up.
+- **Status updates are concurrency-safe.** `Registry` guards its map with one mutex; every transition (`MarkRunning`, `MarkCompleted`, `MarkFailed`) goes through a method that takes the lock, and `Get` returns a copy rather than the internal pointer — so an HTTP handler goroutine polling status can never race with a worker goroutine mid-update.
+- **The queue is bounded, and submission never blocks.** `Submit` uses a `select` with a `default` case — if the channel's buffer is full, it returns `false` immediately instead of making the HTTP request wait for space. This is what turns an overloaded worker pool into a fast `503` instead of a slowly-growing pile of stuck HTTP connections.
+- **One job panicking doesn't take down a worker permanently.** `process` recovers from a panic and marks that one job failed — the worker goroutine keeps running afterward and picks up the next job.
+- **Shutdown is sequenced, not immediate.** On SIGINT/SIGTERM, `main.go` stops the HTTP server first (so no new jobs can be submitted), *then* closes the job channel and waits for already-queued jobs to finish — rather than dropping in-flight work on the floor.
 
 ## Database
 

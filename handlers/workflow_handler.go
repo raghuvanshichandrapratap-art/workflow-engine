@@ -4,16 +4,18 @@ import (
 	"math"
 	"strconv"
 	"workflow-engine/services"
+	"workflow-engine/worker"
 
 	"github.com/gin-gonic/gin"
 )
 
 type WorkflowHandler struct {
-	service *services.WorkflowService
+	service    *services.WorkflowService
+	dispatcher *worker.Dispatcher
 }
 
-func NewWorkflowHandler(service *services.WorkflowService) *WorkflowHandler {
-	return &WorkflowHandler{service: service}
+func NewWorkflowHandler(service *services.WorkflowService, dispatcher *worker.Dispatcher) *WorkflowHandler {
+	return &WorkflowHandler{service: service, dispatcher: dispatcher}
 }
 
 type CreateWorkflowRequest struct {
@@ -106,6 +108,29 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 	}
 
 	c.JSON(200, result)
+}
+
+func (h *WorkflowHandler) ExecuteWorkflowAsync(c *gin.Context) {
+	workflowID := c.Param("id")
+
+	var input map[string]interface{}
+	if err := c.BindJSON(&input); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	if len(input) == 0 {
+		c.JSON(400, gin.H{"error": "input cannot be empty"})
+		return
+	}
+
+	job, ok := h.dispatcher.Enqueue(workflowID, input)
+	if !ok {
+		c.JSON(503, gin.H{"error": "job queue is full, try again shortly"})
+		return
+	}
+
+	c.JSON(202, gin.H{"job_id": job.ID, "status": job.Status})
 }
 
 func (h *WorkflowHandler) GetExecutionHistory(c *gin.Context) {

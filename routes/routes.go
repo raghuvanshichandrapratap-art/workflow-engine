@@ -6,15 +6,18 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func RegisterRoutes(router *gin.Engine, handler *handlers.WorkflowHandler) {
+func RegisterRoutes(router *gin.Engine, workflowHandler *handlers.WorkflowHandler, jobHandler *handlers.JobHandler) {
 	router.Static("/static", "./static")
 	router.StaticFile("/", "./static/index.html")
 
-	router.POST("/workflow", handler.CreateWorkflow)
-	router.GET("/workflow/:id", handler.GetWorkflow)
-	router.PUT("/workflow/:id", handler.UpdateWorkflow)
-	router.DELETE("/workflow/:id", handler.DeleteWorkflow)
-	router.POST("/workflow/:id/generate-dsl", handler.GenerateDSL)
-	router.POST("/workflow/:id/execute", handler.ExecuteWorkflow)
-	router.GET("/workflow/:id/executions", handler.GetExecutionHistory)
+	router.POST("/workflow", workflowHandler.CreateWorkflow)
+	router.GET("/workflow/:id", workflowHandler.GetWorkflow)
+	router.PUT("/workflow/:id", workflowHandler.UpdateWorkflow)
+	router.DELETE("/workflow/:id", workflowHandler.DeleteWorkflow)
+	router.POST("/workflow/:id/generate-dsl", workflowHandler.GenerateDSL)
+	router.POST("/workflow/:id/execute", workflowHandler.ExecuteWorkflow)
+	router.POST("/workflow/:id/execute-async", workflowHandler.ExecuteWorkflowAsync)
+	router.GET("/workflow/:id/executions", workflowHandler.GetExecutionHistory)
+
+	router.GET("/jobs/:job_id", jobHandler.GetJob)
 }

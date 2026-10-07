@@ -22,6 +22,7 @@ import (
 	"workflow-engine/repos"
 	"workflow-engine/routes"
 	"workflow-engine/services"
+	"workflow-engine/worker"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -57,16 +58,24 @@ func TestMain(m *testing.M) {
 	// ai is nil: these tests seed DSLs directly and never call generate-dsl —
 	// AI output quality is eval/'s job, not this suite's.
 	svc := services.NewWorkflowService(workflowRepo, logRepo, nil, engine)
-	handler := handlers.NewWorkflowHandler(svc)
+
+	registry := worker.NewRegistry()
+	pool := worker.NewPool(50, svc, registry)
+	pool.Start(2)
+	dispatcher := worker.NewDispatcher(pool, registry)
+
+	workflowHandler := handlers.NewWorkflowHandler(svc, dispatcher)
+	jobHandler := handlers.NewJobHandler(dispatcher)
 
 	router := gin.New()
-	routes.RegisterRoutes(router, handler)
+	routes.RegisterRoutes(router, workflowHandler, jobHandler)
 
 	testServer = httptest.NewServer(router)
 
 	code := m.Run()
 
 	testServer.Close()
+	pool.Shutdown()
 	// Leave the DB clean afterward.
 	testDB.Exec("TRUNCATE TABLE execution_logs, workflows RESTART IDENTITY CASCADE")
 
