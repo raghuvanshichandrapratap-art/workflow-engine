@@ -15,6 +15,6 @@ WORKDIR /app
 COPY --from=builder /app/server .
 COPY static/ ./static/
 
-EXPOSE 8080
+EXPOSE 5050
 
 CMD ["./server"]

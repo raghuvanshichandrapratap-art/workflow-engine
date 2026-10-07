@@ -169,6 +169,7 @@ DB_PASSWORD=postgres
 DB_NAME=workflow_engine
 DB_PORT=5432
 GROQ_API_KEY=your_groq_api_key
+PORT=5050
 ```
 
 3. Start the application
@@ -176,9 +177,9 @@ GROQ_API_KEY=your_groq_api_key
 docker compose up --build
 ```
 
-The server starts at `http://localhost:8080`
+The server starts at `http://localhost:5050` (override with `PORT` in `.env` if that's also taken).
 
-Open `http://localhost:8080` in your browser to use the UI.
+Open `http://localhost:5050` in your browser to use the UI.
 
 ## API Endpoints
 

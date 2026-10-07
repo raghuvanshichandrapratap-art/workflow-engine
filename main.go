@@ -41,5 +41,9 @@ func main() {
 
 	routes.RegisterRoutes(router, handler)
 
-	router.Run()
+	port := config.GetEnv("PORT")
+	if port == "" {
+		port = "5050"
+	}
+	router.Run(":" + port)
 }

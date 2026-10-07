@@ -1,4 +1,4 @@
-const API = 'http://localhost:8080'
+const API = 'http://localhost:5050'
 
 let selectedWorkflowID = null
 let historyPage = 1
