@@ -43,6 +43,10 @@ workflow-engine/
 │   ├── job.go                     # Job, JobStatus, concurrency-safe Registry
 │   ├── pool.go                    # fixed worker pool over a bounded channel
 │   └── dispatcher.go              # Enqueue/Get — the dependency handlers hold
+├── logger/                        # structured logging + metrics (see Observability)
+│   ├── logger.go                  # slog JSON setup, LOG_LEVEL
+│   ├── metrics.go                 # atomic Counters, global Metrics singleton
+│   └── id.go                      # shared execution/job ID generator
 ├── repos/
 │   ├── workflow_repo.go           # workflow database queries
 │   └── execution_log_repo.go     # execution history queries
@@ -143,7 +147,7 @@ Unit tests live next to the code they test and have no external dependencies:
 ```bash
 go test ./...
 ```
-Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, `.env` loading, and the worker pool (happy path, failure path, panic recovery, queue-full rejection — via a fake `Executor`, no real DB or AI).
+Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, `.env` loading, the worker pool (happy path, failure path, panic recovery, queue-full rejection — via a fake `Executor`, no real DB or AI), and the metrics counters (concurrent-increment correctness via goroutines, since they're backed by `atomic.Int64`).
 
 A separate integration suite exercises the real HTTP API against a real Postgres (the one `docker compose up db` starts), seeding DSLs directly into the database rather than calling `generate-dsl` — testing AI output quality is the evaluation harness's job, not this suite's:
 ```bash
@@ -177,6 +181,7 @@ GROQ_API_KEY=your_groq_api_key
 PORT=5050
 WORKER_COUNT=4
 JOB_QUEUE_CAPACITY=50
+LOG_LEVEL=info
 ```
 
 3. Start the application
@@ -283,6 +288,7 @@ Returns paginated execution logs for a workflow — each entry includes status, 
 | GET | `/workflow/:id` | Get a workflow |
 | PUT | `/workflow/:id` | Update a workflow |
 | DELETE | `/workflow/:id` | Delete a workflow |
+| GET | `/metrics` | Execution counters — see **Observability** |
 
 ## Architecture
 
@@ -327,6 +333,26 @@ A few things worth calling out if you're reading this to learn the pattern, not 
 - **The queue is bounded, and submission never blocks.** `Submit` uses a `select` with a `default` case — if the channel's buffer is full, it returns `false` immediately instead of making the HTTP request wait for space. This is what turns an overloaded worker pool into a fast `503` instead of a slowly-growing pile of stuck HTTP connections.
 - **One job panicking doesn't take down a worker permanently.** `process` recovers from a panic and marks that one job failed — the worker goroutine keeps running afterward and picks up the next job.
 - **Shutdown is sequenced, not immediate.** On SIGINT/SIGTERM, `main.go` stops the HTTP server first (so no new jobs can be submitted), *then* closes the job channel and waits for already-queued jobs to finish — rather than dropping in-flight work on the floor.
+
+## Observability
+
+Structured JSON logs (via `log/slog`, level controlled by `LOG_LEVEL`) and a handful of counters, covering the execution lifecycle end to end.
+
+**Logs** use two separate correlation IDs, because they track two genuinely different things:
+
+- **`execution_id`** — generated fresh inside `WorkflowService.ExecuteWorkflow` every time it's called. Since *both* the synchronous `/execute` handler and the async worker pool's `process` call this one method, every execution gets `"execution started"` / `"execution completed"` or `"execution failed"` log lines with `execution_id`, `workflow_id`, `duration_ms`, and (on failure) `error` — for free, on both paths, with no duplicated logging logic.
+- **`job_id`** — only exists for the async path, logged by the `worker` package itself (`"job queued"`, `"job running"`, `"job completed"`/`"job failed"`, or `"job queue full"` if the queue was rejected before an execution ever started). This is a different layer from `execution_id` on purpose — a queued job and a running execution aren't the same thing, and forcing them to share one ID would mean changing the `Executor` interface for no real benefit at this scale. The two are correlated by `workflow_id` and near-identical timestamps instead.
+
+Example log line:
+```json
+{"time":"...","level":"INFO","msg":"execution completed","execution_id":"a1b2c3d4e5f6a7b8","workflow_id":"9","duration_ms":12,"status":"approved"}
+```
+
+**Counters** (`GET /metrics`, plain JSON, backed by `atomic.Int64`):
+```json
+{ "executions_started": 12, "executions_succeeded": 10, "executions_failed": 2, "queue_errors": 0 }
+```
+`executions_failed` covers every way an execution attempt can fail — workflow not found, no DSL generated yet, a bad DSL step, whatever — they're all failed execution attempts from the caller's perspective. `queue_errors` is deliberately separate: it's the one failure class that happens *before* `ExecuteWorkflow` is ever reached (the job queue was full), so it's never double-counted in `executions_failed`.
 
 ## Database
 

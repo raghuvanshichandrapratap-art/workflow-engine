@@ -1,11 +1,10 @@
 package worker
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"sync"
 	"time"
 
+	"workflow-engine/logger"
 	"workflow-engine/models"
 )
 
@@ -49,7 +48,7 @@ func (r *Registry) Create(workflowID string, input map[string]interface{}) *Job 
 	defer r.mu.Unlock()
 
 	job := &Job{
-		ID:         newJobID(),
+		ID:         logger.NewID(),
 		WorkflowID: workflowID,
 		Input:      input,
 		Status:     JobQueued,
@@ -104,14 +103,4 @@ func (r *Registry) Get(id string) (*Job, bool) {
 	}
 	cp := *job
 	return &cp, true
-}
-
-func newJobID() string {
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		// crypto/rand failing is effectively unheard of on real systems;
-		// fall back to a timestamp so job creation never errors out.
-		return hex.EncodeToString([]byte(time.Now().Format(time.RFC3339Nano)))
-	}
-	return hex.EncodeToString(b)
 }

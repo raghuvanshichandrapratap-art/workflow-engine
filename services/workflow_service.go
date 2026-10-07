@@ -3,7 +3,10 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"strings"
+	"time"
+	"workflow-engine/logger"
 	"workflow-engine/models"
 	"workflow-engine/repos"
 )
@@ -97,7 +100,23 @@ func joinErrors(errs []error) string {
 	return strings.Join(msgs, "; ")
 }
 
-func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{}) (*models.ExecutionResult, error) {
+func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{}) (result *models.ExecutionResult, err error) {
+	executionID := logger.NewID()
+	start := time.Now()
+	logger.Metrics.ExecutionsStarted.Add(1)
+	slog.Info("execution started", "execution_id", executionID, "workflow_id", id)
+
+	defer func() {
+		duration := time.Since(start).Milliseconds()
+		if err != nil {
+			logger.Metrics.ExecutionsFailed.Add(1)
+			slog.Error("execution failed", "execution_id", executionID, "workflow_id", id, "duration_ms", duration, "error", err.Error())
+			return
+		}
+		logger.Metrics.ExecutionsSucceeded.Add(1)
+		slog.Info("execution completed", "execution_id", executionID, "workflow_id", id, "duration_ms", duration, "status", result.Status)
+	}()
+
 	workflow, err := s.repo.GetByID(id)
 	if err != nil {
 		return nil, err
@@ -112,7 +131,7 @@ func (s *WorkflowService) ExecuteWorkflow(id string, input map[string]interface{
 		return nil, fmt.Errorf("failed to parse DSL: %w", err)
 	}
 
-	result, err := s.engine.Execute(&dsl, input)
+	result, err = s.engine.Execute(&dsl, input)
 	if err != nil {
 		return nil, err
 	}

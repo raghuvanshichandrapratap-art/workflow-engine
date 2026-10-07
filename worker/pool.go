@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"log/slog"
 	"sync"
 
 	"workflow-engine/models"
@@ -50,18 +51,22 @@ func (p *Pool) runWorker() {
 func (p *Pool) process(job *Job) {
 	defer func() {
 		if r := recover(); r != nil {
+			slog.Error("worker panic recovered", "job_id", job.ID, "workflow_id", job.WorkflowID, "panic", r)
 			p.registry.MarkFailed(job.ID, fmt.Errorf("panic: %v", r))
 		}
 	}()
 
+	slog.Info("job running", "job_id", job.ID, "workflow_id", job.WorkflowID)
 	p.registry.MarkRunning(job.ID)
 
 	result, err := p.executor.ExecuteWorkflow(job.WorkflowID, job.Input)
 	if err != nil {
+		slog.Error("job failed", "job_id", job.ID, "workflow_id", job.WorkflowID, "error", err.Error())
 		p.registry.MarkFailed(job.ID, err)
 		return
 	}
 
+	slog.Info("job completed", "job_id", job.ID, "workflow_id", job.WorkflowID, "status", result.Status)
 	p.registry.MarkCompleted(job.ID, result)
 }
 

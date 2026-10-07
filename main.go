@@ -11,6 +11,7 @@ import (
 
 	"workflow-engine/config"
 	"workflow-engine/handlers"
+	"workflow-engine/logger"
 	"workflow-engine/repos"
 	"workflow-engine/routes"
 	"workflow-engine/services"
@@ -25,6 +26,8 @@ func main() {
 	if err != nil {
 		panic("Failed to load environment variables")
 	}
+
+	logger.Init(config.GetEnv("LOG_LEVEL"))
 
 	db := config.ConnectDB(
 		config.GetEnv("DB_HOST"),

@@ -1,6 +1,11 @@
 package worker
 
-import "fmt"
+import (
+	"fmt"
+	"log/slog"
+
+	"workflow-engine/logger"
+)
 
 // Dispatcher is the single dependency handlers hold — it combines the pool
 // (where to submit work) and the registry (where to look up status).
@@ -18,8 +23,11 @@ func NewDispatcher(pool *Pool, registry *Registry) *Dispatcher {
 // so a client that calls Get on the returned ID sees a coherent reason why.
 func (d *Dispatcher) Enqueue(workflowID string, input map[string]interface{}) (*Job, bool) {
 	job := d.registry.Create(workflowID, input)
+	slog.Info("job queued", "job_id", job.ID, "workflow_id", workflowID)
 
 	if !d.pool.Submit(job) {
+		logger.Metrics.QueueErrors.Add(1)
+		slog.Warn("job queue full", "job_id", job.ID, "workflow_id", workflowID)
 		d.registry.MarkFailed(job.ID, fmt.Errorf("job queue is full"))
 		return job, false
 	}

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"workflow-engine/logger"
 	"workflow-engine/models"
 
 	"github.com/stretchr/testify/assert"
@@ -122,6 +123,11 @@ func TestDispatcher_Enqueue_MarksFailedWhenQueueFull(t *testing.T) {
 	defer pool.Shutdown()
 	dispatcher := NewDispatcher(pool, registry)
 
+	// logger.Metrics is a shared global singleton, so assert the delta this
+	// test causes rather than an absolute value — other tests in the same
+	// binary run may also touch it.
+	before := logger.Metrics.Snapshot().QueueErrors
+
 	_, ok1 := dispatcher.Enqueue("5", nil)
 	require.True(t, ok1)
 
@@ -129,4 +135,7 @@ func TestDispatcher_Enqueue_MarksFailedWhenQueueFull(t *testing.T) {
 	assert.False(t, ok2)
 	assert.Equal(t, JobFailed, job2.Status)
 	assert.Contains(t, job2.Error, "queue is full")
+
+	after := logger.Metrics.Snapshot().QueueErrors
+	assert.Equal(t, int64(1), after-before, "exactly one QueueErrors increment expected from the full-queue Enqueue")
 }
