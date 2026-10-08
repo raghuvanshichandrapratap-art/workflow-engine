@@ -1,6 +1,6 @@
 # AI Workflow Automation Engine
 
-A backend engine that converts natural language workflow descriptions into structured, executable workflows using AI. Built with Go, PostgreSQL, and Groq AI.
+A backend engine that converts natural language workflow descriptions into structured, executable workflows using AI. Built with Go, PostgreSQL, Redis, and Groq AI.
 
 ## How It Works
 
@@ -18,6 +18,7 @@ A backend engine that converts natural language workflow descriptions into struc
 - **Gin** — HTTP framework
 - **PostgreSQL** — database (JSONB for DSL storage)
 - **GORM** — ORM
+- **Redis** — durable job queue (Streams + consumer groups), job state, idempotency keys
 - **Groq AI** (GPT-OSS 120B) — natural language to DSL conversion
 - **Docker** — containerization
 - **Vanilla JS** — frontend UI
@@ -40,9 +41,12 @@ workflow-engine/
 │   ├── dsl_pipeline.go            # generate -> validate -> retry, with timing
 │   └── execution_engine.go       # runs DSL steps against input data
 ├── worker/                        # async execution worker pool (see below)
-│   ├── job.go                     # Job, JobStatus, concurrency-safe Registry
-│   ├── pool.go                    # fixed worker pool over a bounded channel
+│   ├── job.go                     # Job, JobStatus, Redis-backed Registry
+│   ├── pool.go                    # fixed worker pool over a Redis Stream queue
 │   └── dispatcher.go              # Enqueue/Get — the dependency handlers hold
+├── redis/                         # Redis client + idempotency (see Redis section)
+│   ├── client.go                  # connect + fail-fast ping
+│   └── idempotency.go             # Claim/GetResult/StoreResult/Delete
 ├── logger/                        # structured logging + metrics (see Observability)
 │   ├── logger.go                  # slog JSON setup, LOG_LEVEL
 │   ├── metrics.go                 # atomic Counters, global Metrics singleton
@@ -147,13 +151,13 @@ Unit tests live next to the code they test and have no external dependencies:
 ```bash
 go test ./...
 ```
-Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, `.env` loading, the worker pool (happy path, failure path, panic recovery, queue-full rejection — via a fake `Executor`, no real DB or AI), and the metrics counters (concurrent-increment correctness via goroutines, since they're backed by `atomic.Int64`).
+Covers DSL validation, the execution engine (operators, short-circuit behavior, webhook URL normalization via `httptest`), the generate→validate→retry pipeline (via a fake AI client — no real Groq calls), rate-limit backoff, `.env` loading, the metrics counters (concurrent-increment correctness via goroutines, since they're backed by `atomic.Int64`), idempotency (`Claim`/`GetResult`/`StoreResult`/`Delete`), and the worker pool (happy path, failure path, panic recovery, queue-full rejection — via a fake `Executor` and a real `Pool`/`Registry` running against [`miniredis`](https://github.com/alicebob/miniredis), an in-memory fake Redis server, so none of this needs a real Redis instance).
 
-A separate integration suite exercises the real HTTP API against a real Postgres (the one `docker compose up db` starts), seeding DSLs directly into the database rather than calling `generate-dsl` — testing AI output quality is the evaluation harness's job, not this suite's:
+A separate integration suite exercises the real HTTP API against real Postgres and Redis (the ones `docker compose up db redis` starts), seeding DSLs directly into the database rather than calling `generate-dsl` — testing AI output quality is the evaluation harness's job, not this suite's:
 ```bash
 go test -tags=integration -count=1 ./tests/integration/...
 ```
-It's gated behind the `integration` build tag so a plain `go test ./...` never requires a database. `-count=1` bypasses Go's test cache — safe to skip for the unit tests above since they're pure logic, but worth keeping here since Go's cache only tracks source files, not live database state: if you change something in Postgres directly (not through a `.go` file), a cached result would otherwise still report a stale "ok". Each test truncates `workflows` and `execution_logs` first (for isolation), and the suite truncates both again when it finishes, so run this against a local dev database, not one with data you want to keep.
+It's gated behind the `integration` build tag so a plain `go test ./...` never requires either database. `-count=1` bypasses Go's test cache — safe to skip for the unit tests above since they're pure logic, but worth keeping here since Go's cache only tracks source files, not live database state: if you change something in Postgres or Redis directly (not through a `.go` file), a cached result would otherwise still report a stale "ok". Each test truncates `workflows`/`execution_logs` and clears `job:*`/`idempotency:*` Redis keys first (for isolation — the job stream's consumer group itself is left alone, since a full `FLUSHDB` would delete it along with everything else), and the suite cleans up both stores again when it finishes, so run this against a local dev database, not one with data you want to keep.
 
 ## Getting Started
 
@@ -182,6 +186,9 @@ PORT=5050
 WORKER_COUNT=4
 JOB_QUEUE_CAPACITY=50
 LOG_LEVEL=info
+REDIS_ADDR=localhost:6379
+JOB_TTL_SECONDS=86400
+IDEMPOTENCY_TTL_SECONDS=86400
 ```
 
 3. Start the application
@@ -216,6 +223,7 @@ Sends the workflow description to Groq AI and saves the generated DSL back to th
 ```
 POST /workflow/:id/execute
 ```
+Optional `Idempotency-Key` header — see **Redis: Idempotency & Duplicate Protection** below.
 ```json
 {
   "name": "John Doe",
@@ -242,7 +250,7 @@ Response:
 ```
 POST /workflow/:id/execute-async
 ```
-Same request body as `/execute`. Instead of blocking until the workflow finishes, this enqueues a job and returns immediately:
+Same request body (and optional `Idempotency-Key` header) as `/execute`. Instead of blocking until the workflow finishes, this enqueues a job and returns immediately:
 ```json
 { "job_id": "a1b2c3d4e5f6a7b8", "status": "queued" }
 ```
@@ -310,29 +318,50 @@ The AI service and execution engine are injected into the service layer as depen
 
 ## Async Execution (Worker Pool)
 
-`/execute-async` runs workflows through a fixed-size pool of goroutines instead of on the HTTP request's own goroutine:
+`/execute-async` runs workflows through a fixed-size pool of goroutines instead of on the HTTP request's own goroutine, backed by a durable Redis Stream rather than an in-memory channel:
 
 ```
 POST /execute-async
      ↓
-Dispatcher.Enqueue — creates a Job (status: queued), submits it to a buffered channel
-     ↓                                     (non-blocking — if the channel is full, the
-     ↓                                      job is marked failed and 503 is returned)
-Job queue (buffered chan *Job, capacity JOB_QUEUE_CAPACITY)
+Dispatcher.Enqueue — Registry.Create writes job state to Redis (status: queued),
+     ↓                then Pool.Submit XADDs a small {job_id} entry to the stream
+     ↓                (capacity checked via XLEN first — at capacity, the job is
+     ↓                 marked failed and 503 is returned, no entry added)
+Redis Stream "jobs:stream" + consumer group "workers"
      ↓
-WORKER_COUNT worker goroutines, each: for job := range queue { process(job) }
+WORKER_COUNT worker goroutines, each XREADGROUP-ing one message at a time
      ↓
 process: mark running → call the same WorkflowService.ExecuteWorkflow the
-         synchronous endpoint uses → mark completed or failed
+         synchronous endpoint uses → mark completed or failed → XACK
 ```
 
 A few things worth calling out if you're reading this to learn the pattern, not just use it:
 
 - **The worker package never touches the DB or AI directly.** It depends only on a small `Executor` interface (`ExecuteWorkflow(workflowID, input) (*ExecutionResult, error)`), which `*services.WorkflowService` already satisfies. Since that method already writes to `execution_logs`, a job run through the pool produces history identical to a synchronous call — nothing extra to wire up.
-- **Status updates are concurrency-safe.** `Registry` guards its map with one mutex; every transition (`MarkRunning`, `MarkCompleted`, `MarkFailed`) goes through a method that takes the lock, and `Get` returns a copy rather than the internal pointer — so an HTTP handler goroutine polling status can never race with a worker goroutine mid-update.
-- **The queue is bounded, and submission never blocks.** `Submit` uses a `select` with a `default` case — if the channel's buffer is full, it returns `false` immediately instead of making the HTTP request wait for space. This is what turns an overloaded worker pool into a fast `503` instead of a slowly-growing pile of stuck HTTP connections.
-- **One job panicking doesn't take down a worker permanently.** `process` recovers from a panic and marks that one job failed — the worker goroutine keeps running afterward and picks up the next job.
-- **Shutdown is sequenced, not immediate.** On SIGINT/SIGTERM, `main.go` stops the HTTP server first (so no new jobs can be submitted), *then* closes the job channel and waits for already-queued jobs to finish — rather than dropping in-flight work on the floor.
+- **A message only counts as done once `XACK`'d.** If a worker crashes mid-job, its message stays in the consumer group's pending list instead of vanishing. The next `Start()` (i.e. the next time the app starts) does one `XAUTOCLAIM` pass to reclaim anything left pending from a previous crashed run, before any new messages are read. This is the actual reliability property an in-memory channel can't give you — a channel's buffer is just gone on crash, with no record it ever existed.
+- **Job state lives in Redis, not an in-memory map.** `Registry`'s methods (`Create`/`MarkRunning`/`MarkCompleted`/`MarkFailed`/`Get`) are the same as before, but now backed by `SET`/`GET` with a `JOB_TTL_SECONDS` expiry — so job history survives a restart instead of being silently wiped, and doesn't accumulate forever either.
+- **The queue is bounded, and submission never blocks.** `Submit` checks `XLEN` against `JOB_QUEUE_CAPACITY` before adding — at capacity, it returns `false` immediately rather than making the HTTP request wait for space. (This check-then-add isn't atomic — a real system closing that last gap would use a Lua script via `EVAL`.)
+- **One job panicking doesn't take down a worker permanently.** `process` recovers from a panic and marks that one job failed — the worker goroutine keeps running afterward and picks up the next message.
+- **Shutdown is sequenced, not immediate.** On SIGINT/SIGTERM, `main.go` stops the HTTP server first (so no new jobs can be submitted), *then* cancels the workers' context and waits for in-flight jobs to finish — rather than dropping work on the floor.
+
+## Redis: Idempotency & Duplicate Protection
+
+A retried `/execute` or `/execute-async` call — a client that times out and resends, for instance — would otherwise just run the workflow again, which matters concretely because the `webhook` action makes a real outbound HTTP call. An optional `Idempotency-Key` header (any client-chosen string) prevents that:
+
+- **First request** with a given key: `SET idempotency:<key> "processing" NX EX <ttl>` atomically claims it, the workflow actually runs, and the real result overwrites the placeholder when it finishes.
+- **A retry with the same key** before it's done: the `NX` claim fails, so the handler returns `409` rather than starting a second execution. If the in-flight request's `GetResult` poll (a few short retries) catches the first one finishing in the meantime, it returns that result instead of a `409`.
+- **A retry after it's done**: the handler finds the cached result immediately and replays it verbatim — `/execute` returns the exact original JSON body, `/execute-async` returns the same `job_id` rather than enqueueing a new job.
+- **A failed attempt releases its key** (`Delete`) rather than caching the failure — a transient error shouldn't permanently block a legitimate retry with the same key.
+
+The header is optional everywhere — omit it and a request just executes normally, no dedup check at all, so existing clients (the frontend included) work unmodified.
+
+```bash
+curl -X POST localhost:5050/workflow/1/execute \
+  -H "Idempotency-Key: $(uuidgen)" \
+  -d '{"age": 25}'
+```
+
+**This is at-least-once delivery, not exactly-once — worth being honest about.** A job reclaimed after a crash (see **Async Execution** above) is *re-executed from scratch*, not resumed from where it left off. If the original attempt had already called the `webhook` action successfully before crashing, the reclaimed re-run calls it again. The idempotency work above protects against a *client* retrying into this API with the same key — it does nothing to stop *our own* crash-reclaim mechanism from re-triggering a downstream call. Closing that gap fully would require the downstream webhook target to itself support idempotency keys (e.g. accepting our `execution_id` and deduping on its end) — outside this project's control, and not something attempted here.
 
 ## Observability
 

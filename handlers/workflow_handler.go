@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"math"
 	"strconv"
+	"time"
+	"workflow-engine/redis"
 	"workflow-engine/services"
 	"workflow-engine/worker"
 
@@ -10,12 +13,13 @@ import (
 )
 
 type WorkflowHandler struct {
-	service    *services.WorkflowService
-	dispatcher *worker.Dispatcher
+	service     *services.WorkflowService
+	dispatcher  *worker.Dispatcher
+	idempotency *redis.Idempotency
 }
 
-func NewWorkflowHandler(service *services.WorkflowService, dispatcher *worker.Dispatcher) *WorkflowHandler {
-	return &WorkflowHandler{service: service, dispatcher: dispatcher}
+func NewWorkflowHandler(service *services.WorkflowService, dispatcher *worker.Dispatcher, idempotency *redis.Idempotency) *WorkflowHandler {
+	return &WorkflowHandler{service: service, dispatcher: dispatcher, idempotency: idempotency}
 }
 
 type CreateWorkflowRequest struct {
@@ -89,6 +93,8 @@ func (h *WorkflowHandler) GenerateDSL(c *gin.Context) {
 
 func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 	workflowID := c.Param("id")
+	ctx := c.Request.Context()
+	idempotencyKey := c.GetHeader("Idempotency-Key")
 
 	var input map[string]interface{}
 	if err := c.BindJSON(&input); err != nil {
@@ -101,10 +107,46 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 		return
 	}
 
+	if idempotencyKey != "" {
+		cached, found, err := h.idempotency.GetResult(ctx, idempotencyKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		if found {
+			if redis.IsProcessing(cached) {
+				c.JSON(409, gin.H{"error": "a request with this idempotency key is already being processed"})
+				return
+			}
+			c.Data(200, "application/json", []byte(cached))
+			return
+		}
+
+		claimed, err := h.idempotency.Claim(ctx, idempotencyKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		if !claimed {
+			c.JSON(409, gin.H{"error": "a request with this idempotency key is already being processed"})
+			return
+		}
+	}
+
 	result, err := h.service.ExecuteWorkflow(workflowID, input)
 	if err != nil {
+		if idempotencyKey != "" {
+			// Don't poison the key on a transient failure — let a retry through.
+			h.idempotency.Delete(ctx, idempotencyKey)
+		}
 		c.JSON(500, gin.H{"error": err.Error()})
 		return
+	}
+
+	if idempotencyKey != "" {
+		if resultJSON, marshalErr := json.Marshal(result); marshalErr == nil {
+			h.idempotency.StoreResult(ctx, idempotencyKey, string(resultJSON))
+		}
 	}
 
 	c.JSON(200, result)
@@ -112,6 +154,8 @@ func (h *WorkflowHandler) ExecuteWorkflow(c *gin.Context) {
 
 func (h *WorkflowHandler) ExecuteWorkflowAsync(c *gin.Context) {
 	workflowID := c.Param("id")
+	ctx := c.Request.Context()
+	idempotencyKey := c.GetHeader("Idempotency-Key")
 
 	var input map[string]interface{}
 	if err := c.BindJSON(&input); err != nil {
@@ -124,13 +168,70 @@ func (h *WorkflowHandler) ExecuteWorkflowAsync(c *gin.Context) {
 		return
 	}
 
-	job, ok := h.dispatcher.Enqueue(workflowID, input)
+	if idempotencyKey != "" {
+		if job, replayed := h.replayAsyncJob(c, idempotencyKey); replayed {
+			c.JSON(202, gin.H{"job_id": job.ID, "status": job.Status})
+			return
+		}
+
+		claimed, err := h.idempotency.Claim(ctx, idempotencyKey)
+		if err != nil {
+			c.JSON(500, gin.H{"error": err.Error()})
+			return
+		}
+		if !claimed {
+			// Someone else is mid-enqueue for this key — briefly poll for
+			// them to finish storing the job id before giving up.
+			for i := 0; i < 3; i++ {
+				time.Sleep(50 * time.Millisecond)
+				if job, replayed := h.replayAsyncJob(c, idempotencyKey); replayed {
+					c.JSON(202, gin.H{"job_id": job.ID, "status": job.Status})
+					return
+				}
+			}
+			c.JSON(409, gin.H{"error": "a request with this idempotency key is already being processed"})
+			return
+		}
+	}
+
+	job, ok, err := h.dispatcher.Enqueue(ctx, workflowID, input)
+	if err != nil {
+		if idempotencyKey != "" {
+			h.idempotency.Delete(ctx, idempotencyKey)
+		}
+		c.JSON(500, gin.H{"error": err.Error()})
+		return
+	}
 	if !ok {
+		if idempotencyKey != "" {
+			h.idempotency.Delete(ctx, idempotencyKey)
+		}
 		c.JSON(503, gin.H{"error": "job queue is full, try again shortly"})
 		return
 	}
 
+	if idempotencyKey != "" {
+		h.idempotency.StoreResult(ctx, idempotencyKey, job.ID)
+	}
+
 	c.JSON(202, gin.H{"job_id": job.ID, "status": job.Status})
+}
+
+// replayAsyncJob checks whether idempotencyKey already maps to a job and,
+// if so, returns that job instead of enqueueing a new one.
+func (h *WorkflowHandler) replayAsyncJob(c *gin.Context, idempotencyKey string) (*worker.Job, bool) {
+	ctx := c.Request.Context()
+
+	jobID, found, err := h.idempotency.GetResult(ctx, idempotencyKey)
+	if err != nil || !found || redis.IsProcessing(jobID) {
+		return nil, false
+	}
+
+	job, ok, err := h.dispatcher.Get(ctx, jobID)
+	if err != nil || !ok {
+		return nil, false
+	}
+	return job, true
 }
 
 func (h *WorkflowHandler) GetExecutionHistory(c *gin.Context) {

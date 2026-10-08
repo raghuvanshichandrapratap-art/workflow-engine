@@ -1,11 +1,16 @@
 package worker
 
 import (
-	"sync"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"workflow-engine/logger"
 	"workflow-engine/models"
+
+	goredis "github.com/redis/go-redis/v9"
 )
 
 type JobStatus string
@@ -18,35 +23,38 @@ const (
 )
 
 type Job struct {
-	ID         string                 `json:"id"`
-	WorkflowID string                 `json:"workflow_id"`
-	Input      map[string]interface{} `json:"input"`
-	Status     JobStatus              `json:"status"`
+	ID         string                  `json:"id"`
+	WorkflowID string                  `json:"workflow_id"`
+	Input      map[string]interface{}  `json:"input"`
+	Status     JobStatus               `json:"status"`
 	Result     *models.ExecutionResult `json:"result,omitempty"`
-	Error      string                 `json:"error,omitempty"`
-	CreatedAt  time.Time              `json:"created_at"`
-	StartedAt  *time.Time             `json:"started_at,omitempty"`
-	FinishedAt *time.Time             `json:"finished_at,omitempty"`
+	Error      string                  `json:"error,omitempty"`
+	CreatedAt  time.Time               `json:"created_at"`
+	StartedAt  *time.Time              `json:"started_at,omitempty"`
+	FinishedAt *time.Time              `json:"finished_at,omitempty"`
 }
 
-// Registry is the concurrency-safe job store. One mutex guards the whole
-// map, and every status transition goes through a Registry method rather
-// than mutating a Job's fields directly from outside the lock. Get returns
-// a copy, not the internal pointer, so a caller can never read a field
-// while a worker is mid-write to it.
+// Registry is the durable job store, backed by Redis. A job is only ever
+// mutated by the single worker goroutine processing it, so the read-modify-
+// write shape of the Mark* methods never races against a concurrent writer —
+// only concurrent readers (HTTP polling via Get), which a plain Redis SET
+// already makes safe (a reader sees either the old or the new value, never
+// a partial write). Keys expire after ttl so completed jobs don't accumulate
+// forever.
 type Registry struct {
-	mu   sync.RWMutex
-	jobs map[string]*Job
+	client *goredis.Client
+	ttl    time.Duration
 }
 
-func NewRegistry() *Registry {
-	return &Registry{jobs: make(map[string]*Job)}
+func NewRegistry(client *goredis.Client, ttl time.Duration) *Registry {
+	return &Registry{client: client, ttl: ttl}
 }
 
-func (r *Registry) Create(workflowID string, input map[string]interface{}) *Job {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func jobKey(id string) string {
+	return "job:" + id
+}
 
+func (r *Registry) Create(ctx context.Context, workflowID string, input map[string]interface{}) (*Job, error) {
 	job := &Job{
 		ID:         logger.NewID(),
 		WorkflowID: workflowID,
@@ -54,53 +62,72 @@ func (r *Registry) Create(workflowID string, input map[string]interface{}) *Job 
 		Status:     JobQueued,
 		CreatedAt:  time.Now(),
 	}
-	r.jobs[job.ID] = job
-	return job
+
+	if err := r.save(ctx, job); err != nil {
+		return nil, err
+	}
+	return job, nil
 }
 
-func (r *Registry) MarkRunning(id string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if job, ok := r.jobs[id]; ok {
+func (r *Registry) MarkRunning(ctx context.Context, id string) error {
+	return r.update(ctx, id, func(job *Job) {
 		now := time.Now()
 		job.Status = JobRunning
 		job.StartedAt = &now
-	}
+	})
 }
 
-func (r *Registry) MarkCompleted(id string, result *models.ExecutionResult) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if job, ok := r.jobs[id]; ok {
+func (r *Registry) MarkCompleted(ctx context.Context, id string, result *models.ExecutionResult) error {
+	return r.update(ctx, id, func(job *Job) {
 		now := time.Now()
 		job.Status = JobCompleted
 		job.Result = result
 		job.FinishedAt = &now
-	}
+	})
 }
 
-func (r *Registry) MarkFailed(id string, err error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if job, ok := r.jobs[id]; ok {
+func (r *Registry) MarkFailed(ctx context.Context, id string, failErr error) error {
+	return r.update(ctx, id, func(job *Job) {
 		now := time.Now()
 		job.Status = JobFailed
-		job.Error = err.Error()
+		job.Error = failErr.Error()
 		job.FinishedAt = &now
-	}
+	})
 }
 
-func (r *Registry) Get(id string) (*Job, bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	job, ok := r.jobs[id]
-	if !ok {
-		return nil, false
+func (r *Registry) Get(ctx context.Context, id string) (*Job, bool, error) {
+	raw, err := r.client.Get(ctx, jobKey(id)).Result()
+	if errors.Is(err, goredis.Nil) {
+		return nil, false, nil
 	}
-	cp := *job
-	return &cp, true
+	if err != nil {
+		return nil, false, err
+	}
+
+	var job Job
+	if err := json.Unmarshal([]byte(raw), &job); err != nil {
+		return nil, false, fmt.Errorf("failed to parse stored job %s: %w", id, err)
+	}
+	return &job, true, nil
+}
+
+func (r *Registry) update(ctx context.Context, id string, mutate func(*Job)) error {
+	job, found, err := r.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("job %s not found", id)
+	}
+
+	mutate(job)
+	return r.save(ctx, job)
+}
+
+func (r *Registry) save(ctx context.Context, job *Job) error {
+	raw, err := json.Marshal(job)
+	if err != nil {
+		return fmt.Errorf("failed to serialize job %s: %w", job.ID, err)
+	}
+	return r.client.Set(ctx, jobKey(job.ID), raw, r.ttl).Err()
 }

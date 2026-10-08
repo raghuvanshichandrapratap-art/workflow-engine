@@ -12,6 +12,7 @@ import (
 	"workflow-engine/config"
 	"workflow-engine/handlers"
 	"workflow-engine/logger"
+	"workflow-engine/redis"
 	"workflow-engine/repos"
 	"workflow-engine/routes"
 	"workflow-engine/services"
@@ -47,14 +48,28 @@ func main() {
 
 	service := services.NewWorkflowService(repo, logRepo, aiService, engine)
 
-	registry := worker.NewRegistry()
+	redisAddr := config.GetEnv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+	redisClient, err := redis.NewClient(redisAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	jobTTL := time.Duration(config.GetEnvInt("JOB_TTL_SECONDS", 86400)) * time.Second
+	idempotencyTTL := time.Duration(config.GetEnvInt("IDEMPOTENCY_TTL_SECONDS", 86400)) * time.Second
+
+	registry := worker.NewRegistry(redisClient, jobTTL)
 	workerCount := config.GetEnvInt("WORKER_COUNT", 4)
 	queueCapacity := config.GetEnvInt("JOB_QUEUE_CAPACITY", 50)
-	pool := worker.NewPool(queueCapacity, service, registry)
+	pool := worker.NewPool(redisClient, "jobs:stream", int64(queueCapacity), service, registry)
 	pool.Start(workerCount)
 	dispatcher := worker.NewDispatcher(pool, registry)
 
-	workflowHandler := handlers.NewWorkflowHandler(service, dispatcher)
+	idempotency := redis.NewIdempotency(redisClient, idempotencyTTL)
+
+	workflowHandler := handlers.NewWorkflowHandler(service, dispatcher, idempotency)
 	jobHandler := handlers.NewJobHandler(dispatcher)
 
 	router := gin.Default()

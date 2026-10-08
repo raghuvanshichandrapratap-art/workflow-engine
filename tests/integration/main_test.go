@@ -1,24 +1,28 @@
 //go:build integration
 
-// Package integration exercises the real HTTP API against a real Postgres —
-// run with: go test -tags=integration ./tests/integration/...
-// Requires the Postgres started by `docker compose up db` (or any Postgres
-// reachable via the DB_* env vars below). Each test truncates workflows and
-// execution_logs first, so this is meant for a local dev database, not one
-// shared with other work.
+// Package integration exercises the real HTTP API against real Postgres and
+// Redis — run with: go test -tags=integration ./tests/integration/...
+// Requires both started by `docker compose up db redis` (or reachable via
+// the DB_*/REDIS_ADDR env vars below). Each test truncates workflows and
+// execution_logs and clears job/idempotency Redis keys first, so this is
+// meant for a local dev database, not one shared with other work.
 package integration
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"workflow-engine/config"
 	"workflow-engine/handlers"
+	"workflow-engine/redis"
 	"workflow-engine/repos"
 	"workflow-engine/routes"
 	"workflow-engine/services"
@@ -26,12 +30,14 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	goredis "github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 var (
-	testServer *httptest.Server
-	testDB     *gorm.DB
+	testServer      *httptest.Server
+	testDB          *gorm.DB
+	testRedisClient *goredis.Client
 )
 
 func TestMain(m *testing.M) {
@@ -59,12 +65,21 @@ func TestMain(m *testing.M) {
 	// AI output quality is eval/'s job, not this suite's.
 	svc := services.NewWorkflowService(workflowRepo, logRepo, nil, engine)
 
-	registry := worker.NewRegistry()
-	pool := worker.NewPool(50, svc, registry)
+	var err error
+	testRedisClient, err = redis.NewClient(envOr("REDIS_ADDR", "localhost:6379"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	registry := worker.NewRegistry(testRedisClient, time.Hour)
+	pool := worker.NewPool(testRedisClient, "test:jobs:stream", 50, svc, registry)
 	pool.Start(2)
 	dispatcher := worker.NewDispatcher(pool, registry)
 
-	workflowHandler := handlers.NewWorkflowHandler(svc, dispatcher)
+	idempotency := redis.NewIdempotency(testRedisClient, time.Hour)
+
+	workflowHandler := handlers.NewWorkflowHandler(svc, dispatcher, idempotency)
 	jobHandler := handlers.NewJobHandler(dispatcher)
 
 	router := gin.New()
@@ -76,8 +91,9 @@ func TestMain(m *testing.M) {
 
 	testServer.Close()
 	pool.Shutdown()
-	// Leave the DB clean afterward.
+	// Leave the DB and Redis clean afterward.
 	testDB.Exec("TRUNCATE TABLE execution_logs, workflows RESTART IDENTITY CASCADE")
+	testRedisClient.FlushDB(context.Background())
 
 	os.Exit(code)
 }
@@ -94,9 +110,33 @@ func truncateTables(t *testing.T) {
 	if err := testDB.Exec("TRUNCATE TABLE execution_logs, workflows RESTART IDENTITY CASCADE").Error; err != nil {
 		t.Fatalf("failed to truncate tables: %v", err)
 	}
+	if err := clearRedisTestKeys(context.Background()); err != nil {
+		t.Fatalf("failed to clear redis test keys: %v", err)
+	}
 }
 
-func doRequest(t *testing.T, method, path string, body any) (*http.Response, []byte) {
+// clearRedisTestKeys removes job and idempotency keys only — not a full
+// FlushDB, since that would also delete the job stream's consumer group
+// (created once in TestMain), breaking every test after the first.
+func clearRedisTestKeys(ctx context.Context) error {
+	for _, pattern := range []string{"job:*", "idempotency:*"} {
+		keys, err := testRedisClient.Keys(ctx, pattern).Result()
+		if err != nil {
+			return err
+		}
+		if len(keys) > 0 {
+			if err := testRedisClient.Del(ctx, keys...).Err(); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// doRequest issues an HTTP request against the test server. Extra headers
+// are optional and variadic (each a [name, value] pair) so existing call
+// sites that don't need them are unaffected.
+func doRequest(t *testing.T, method, path string, body any, headers ...[2]string) (*http.Response, []byte) {
 	t.Helper()
 
 	var reqBody io.Reader
@@ -114,6 +154,9 @@ func doRequest(t *testing.T, method, path string, body any) (*http.Response, []b
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
+	}
+	for _, h := range headers {
+		req.Header.Set(h[0], h[1])
 	}
 
 	resp, err := testServer.Client().Do(req)
